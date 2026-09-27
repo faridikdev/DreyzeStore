@@ -86,6 +86,13 @@ function requiredString(value: unknown, maxLength: number): string {
   return value;
 }
 
+function descriptionPreview(value: unknown): string {
+  const normalized = requiredString(value, 20_000).replace(/\s+/gu, " ").trim();
+  if (!normalized) throw invalidStoredData();
+  const characters = Array.from(normalized);
+  return characters.length <= 160 ? normalized : `${characters.slice(0, 159).join("").trimEnd()}…`;
+}
+
 function requiredId(value: unknown): string {
   const id = requiredString(value, 128);
   if (!ID_PATTERN.test(id)) throw invalidStoredData();
@@ -222,6 +229,7 @@ function mapAppSummary(row: AppRow, latest: InternalVersion, assetBase: URL): St
     id: requiredId(row.app_id),
     bundleIdentifier: requiredBundleIdentifier(row.bundle_identifier),
     name: requiredString(row.app_name, 160),
+    shortDescription: descriptionPreview(row.app_description),
     developer,
     category: {
       id: categoryId,

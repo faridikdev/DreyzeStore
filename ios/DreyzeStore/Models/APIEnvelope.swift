@@ -8,6 +8,9 @@ public struct APIEnvelope<Value: Decodable & Sendable>: Decodable, Sendable {
 public struct APIResponseMetadata: Decodable, Sendable {
     public let requestId: String?
     public let nextCursor: String?
+    public let page: Int?
+    public let pageSize: Int?
+    public let hasMore: Bool?
 }
 
 public struct APIErrorEnvelope: Decodable, Sendable {

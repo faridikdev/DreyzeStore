@@ -88,6 +88,7 @@ export interface StoreAppSummary {
   id: string;
   bundleIdentifier: string;
   name: string;
+  shortDescription: string;
   developer: Developer;
   category: Category;
   iconURL: string;

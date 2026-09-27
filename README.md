@@ -2,23 +2,23 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 2 implements the public read-only catalog API and local development seed; the full store is not complete:** admin login and editing, package upload/download, IPA validation, real installation adapters, and production deployment have not been implemented.
+DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 3 connects the native SwiftUI client to the Phase 2 read-only catalog API.** Admin login and editing, IPA transfer/validation, real installation adapters, and production deployment remain future work.
 
 An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
 
 ## Architecture
 
-- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, async `URLSession` API client, typed models, and a capability-gated installation protocol.
-- `backend`: TypeScript Cloudflare Worker using Hono, local D1 migrations, and local R2 bindings for eventual public assets and private staging.
+- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, and a capability-gated installation protocol.
+- `backend`: TypeScript Cloudflare Worker using Hono, local D1 migrations, and local R2 bindings for eventual public assets and private staging. App summaries include a bounded short description so catalog cards do not fetch detail records one by one.
 - `admin`: React, TypeScript, and Vite static administration client. Phase 1 performs an API health check; write workflows and authentication are deferred.
 - `shared`: repository JSON Schema v1 and shared API DTOs.
 - `.github/workflows/ci.yml`: Linux backend/admin checks and macOS simulator build/test.
 
-See [architecture](docs/architecture.md), [backend development](docs/backend.md), [API reference](docs/api.md), [repository format](docs/repository-format.md), [installation boundary](docs/installation.md), [security](docs/security.md), [licenses](docs/licenses.md), [CI boundary](docs/ci.md), and [deployment boundary](docs/deployment.md).
+See [architecture](docs/architecture.md), [iOS client](docs/ios-client.md), [backend development](docs/backend.md), [API reference](docs/api.md), [repository format](docs/repository-format.md), [installation boundary](docs/installation.md), [security](docs/security.md), [licenses](docs/licenses.md), [CI boundary](docs/ci.md), and [deployment boundary](docs/deployment.md).
 
 ## Screenshots
 
-Screenshots will be added after the native catalog screens are implemented. The current iOS views explicitly identify themselves as not yet connected to store content.
+The native client now includes Today, Apps, Search, app details with screenshot gallery and version history, Updates, Library, and Settings. It displays only metadata returned by the configured API. Screenshots from the running app will be added after simulator review.
 
 ## Requirements
 
@@ -39,7 +39,7 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-The configured API URL ends in the reserved `.invalid` domain until a future environment config supplies an endpoint. No demo catalog is compiled into the app.
+The Debug configuration points at `http://127.0.0.1:8787/api/v1` for the local Worker. Override the `DREYZE_API_BASE_URL` Xcode build setting to use another development endpoint. Release builds remain pointed at the reserved `.invalid` domain until an approved production endpoint exists. No mock catalog is compiled into the app.
 
 ## Running the backend
 

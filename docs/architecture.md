@@ -1,6 +1,6 @@
 # DreyzeStore architecture
 
-**Status:** Phase 2 backend complete. The repository includes the iOS shell, read-only catalog API on the local Cloudflare Worker stack, repository-v1 generation/validation, local D1 migrations and seed, admin shell, and CI. No cloud resources have been created. This document records both the current implementation and the longer-term target; anything marked future-phase is not a live feature.
+**Status:** Phase 3 iOS store client complete. The native client consumes the Phase 2 public catalog API and supports browse/search/details, bounded metadata and image caches, and cached offline browsing. IPA transfer, installation backends, admin authentication, and cloud deployment remain future work. No cloud resources have been created.
 
 ## Goals and platform boundary
 
@@ -24,7 +24,7 @@ The admin app is a static SPA because it has no public pages that need server-si
 
 ## System shape
 
-This is the target system shape. In Phase 2, only the public catalog metadata API and local D1 seed are implemented; admin auth, package transfer/validation, installation, and production storage are later work.
+This is the target system shape. In Phase 3, the native client reads the public catalog API and caches metadata/images. Admin auth, package transfer/validation, installation, and production storage are later work.
 
 ```mermaid
 flowchart LR
@@ -199,4 +199,4 @@ Upstream references: [TrollStore license](https://github.com/opa334/TrollStore/b
 
 ## Phase gates
 
-Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation. Phase 2 adds the public read-only API, D1 search/index constraints, repository generation, and fictional local-only metadata. Phase 3 will connect the iOS catalog UI. Admin management, package validation/download, installation, and production deployment remain later explicit phase gates. No production DNS, Cloudflare resources, or secrets have been created.
+Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation. Phase 2 added the public read-only API, D1 search/index constraints, repository generation, and fictional local-only metadata. Phase 3 connected the iOS catalog UI, tests decoding/state, and added metadata/image caching. Admin management, package validation/download, installation, and production deployment remain later explicit phase gates. No production DNS, Cloudflare resources, or secrets have been created.

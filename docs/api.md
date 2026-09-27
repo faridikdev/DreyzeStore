@@ -10,6 +10,8 @@ The catalog returns only published, non-deleted applications that have at least 
 
 Returns summaries, sorted by name by default.
 
+Each summary includes `shortDescription`: whitespace-normalized app text capped at 160 Unicode code points. This keeps list cards self-contained and avoids one details request per visible row. The additive field can be ignored by existing clients.
+
 ```http
 GET /api/v1/apps?category=utilities&repository=com.dreyze.official&sort=updated&page=1&limit=24
 ```
@@ -23,6 +25,7 @@ Supported filters: `category` (canonical slug such as `developer-tools`), `repos
       "id": "app-aurora-notes",
       "bundleIdentifier": "com.dreyze.auroranotes",
       "name": "Aurora Notes",
+      "shortDescription": "Fictional sample note-taking app metadata for local catalog development.",
       "developer": { "id": "developer-dreyze-labs", "name": "Dreyze Labs (fictional)" },
       "category": { "id": "productivity", "name": "Productivity" },
       "iconURL": "https://cdn.example.invalid/icons/aurora-notes.png",

@@ -83,11 +83,12 @@ describe("DreyzeStore catalog API", () => {
   it("paginates apps and continues with a filter-bound keyset cursor", async () => {
     const firstResponse = await request("/api/v1/apps?limit=2&sort=name");
     const first = await firstResponse.json() as {
-      data: Array<{ id: string }>;
+      data: Array<{ id: string; shortDescription: string }>;
       meta: { hasMore: boolean; nextCursor: string; page: number; pageSize: number };
     };
     expect(firstResponse.status).toBe(200);
     expect(first.data).toHaveLength(2);
+    expect(first.data.every((item) => item.shortDescription.length > 0 && item.shortDescription.length <= 160)).toBe(true);
     expect(first.meta).toMatchObject({ hasMore: true, page: 1, pageSize: 2 });
     expect(first.meta.nextCursor).toBeTruthy();
 
@@ -97,6 +98,19 @@ describe("DreyzeStore catalog API", () => {
     expect(next.data).toHaveLength(2);
     expect(next.data.map((item) => item.id)).not.toEqual(expect.arrayContaining(first.data.map((item) => item.id)));
     expect(next.meta.hasMore).toBe(false);
+  });
+
+  it("returns a Unicode-safe short description capped at 160 characters", async () => {
+    const longDescription = `${"Orbit 🌱 timer ".repeat(20)}Keeps the day on track.`;
+    database.prepare("UPDATE apps SET description = ? WHERE id = ?").run(longDescription, "app-orbit-timer");
+
+    const response = await request("/api/v1/apps?limit=100");
+    const body = await response.json() as { data: Array<{ id: string; shortDescription: string }> };
+    const timer = body.data.find((item) => item.id === "app-orbit-timer");
+    expect(response.status).toBe(200);
+    expect(Array.from(timer?.shortDescription ?? "")).toHaveLength(160);
+    expect(timer?.shortDescription.endsWith("…")).toBe(true);
+    expect(timer?.shortDescription).not.toContain("\uFFFD");
   });
 
   it("filters by category and repository and accepts bounded page numbers", async () => {
