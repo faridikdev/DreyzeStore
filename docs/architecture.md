@@ -1,6 +1,6 @@
 # DreyzeStore architecture
 
-**Status:** Phase 3 iOS store client complete. The native client consumes the Phase 2 public catalog API and supports browse/search/details, bounded metadata and image caches, and cached offline browsing. IPA transfer, installation backends, admin authentication, and cloud deployment remain future work. No cloud resources have been created.
+**Status:** Phase 5 installation boundary complete. The native client consumes the Phase 2 public catalog API, supports browse/search/details, bounded metadata and image caches, cached offline browsing, verified IPA downloads, and a system-share handoff that is never presented as a confirmed installation. TrollStore/private-helper install backends, admin authentication, and cloud deployment remain unavailable or future work. No cloud resources have been created.
 
 ## Goals and platform boundary
 

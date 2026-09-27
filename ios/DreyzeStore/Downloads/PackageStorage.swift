@@ -261,6 +261,31 @@ final class PackageStorage: @unchecked Sendable {
         return url
     }
 
+    func storedPackage(matching package: VerifiedPackage) -> StoredVerifiedPackage? {
+        lock.lock(); defer { lock.unlock() }
+        guard let id = UUID(uuidString: package.localURL.deletingPathExtension().lastPathComponent),
+              id.uuidString.lowercased() == package.localURL.deletingPathExtension().lastPathComponent,
+              package.localURL.isFileURL,
+              package.localURL.standardizedFileURL == packageURL(for: id.uuidString.lowercased()).standardizedFileURL,
+              isRegularFile(package.localURL),
+              isRegularFile(recordURL(for: id.uuidString.lowercased())),
+              let data = try? Data(contentsOf: recordURL(for: id.uuidString.lowercased())) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let record = try? decoder.decode(StoredVerifiedPackage.self, from: data),
+              record.id == id.uuidString.lowercased(),
+              record.bundleIdentifier == package.bundleIdentifier,
+              record.version == package.version,
+              record.build == package.build,
+              record.minimumOSVersion == package.minimumOSVersion,
+              record.size == package.size,
+              record.sha256.caseInsensitiveCompare(package.sha256) == .orderedSame,
+              record.sourceIdentifier == package.sourceIdentifier,
+              record.sourceName == package.sourceName,
+              packageURL(for: record)?.standardizedFileURL == package.localURL.standardizedFileURL else { return nil }
+        return record
+    }
+
     func deleteVerifiedPackage(id: String) throws {
         guard let uuid = UUID(uuidString: id), id == uuid.uuidString.lowercased() else { return }
         lock.lock(); defer { lock.unlock() }

@@ -156,7 +156,36 @@ struct PackageValidator: Sendable {
               Self.normalizedOSVersion(inspected.minimumOSVersion) == Self.normalizedOSVersion(package.minimumOSVersion) else {
             throw PackageDownloadFailure(.invalidMetadata)
         }
-        return VerifiedPackage(localURL: fileURL, release: release, size: actualSize, sha256: digest, verifiedAt: package.verifiedAt)
+        let finalSize = try Self.regularFileSize(fileURL)
+        let finalDigest = try Self.sha256(fileURL)
+        guard finalSize == actualSize,
+              Self.constantTimeSHA256Match(expected: package.sha256, actual: finalDigest) else {
+            throw PackageDownloadFailure(.checksumMismatch)
+        }
+        return VerifiedPackage(localURL: fileURL, release: release, size: finalSize, sha256: finalDigest, verifiedAt: package.verifiedAt)
+    }
+
+    /// Re-establishes the package boundary immediately before installation.
+    /// The receipt must still map to an IPA and metadata record owned by this
+    /// PackageStorage instance; current bytes and IPA metadata are then checked
+    /// again. No caller-provided path or server-only metadata can pass this gate.
+    func revalidateForInstallation(_ package: VerifiedPackage) throws -> VerifiedPackage {
+        guard let stored = storage.storedPackage(matching: package) else {
+            throw PackageVerificationError.unsafeArchive
+        }
+        let current = try revalidateStoredPackage(stored)
+        guard current.localURL.standardizedFileURL == package.localURL.standardizedFileURL,
+              current.bundleIdentifier == package.bundleIdentifier,
+              current.version == package.version,
+              current.build == package.build,
+              current.minimumOSVersion == package.minimumOSVersion,
+              current.size == package.size,
+              Self.constantTimeSHA256Match(expected: package.sha256, actual: current.sha256),
+              current.sourceIdentifier == package.sourceIdentifier,
+              current.sourceName == package.sourceName else {
+            throw PackageVerificationError.unsafeArchive
+        }
+        return current
     }
 
     private func inspectArchive(at fileURL: URL) throws -> InspectedPackageMetadata {

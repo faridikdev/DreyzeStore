@@ -4,8 +4,18 @@ import UIKit
 struct DownloadFlowSheet: View {
     let app: StoreApp
     @ObservedObject var manager: DownloadManager
+    @StateObject private var installationCoordinator: InstallationCoordinator
     @Environment(\.dismiss) private var dismiss
     @State private var showFailureDetails = false
+    @State private var showInstallationFailureDetails = false
+    @State private var showingInstallConfirmation = false
+    @State private var selectedBackendIdentifier = ""
+
+    init(app: StoreApp, manager: DownloadManager) {
+        self.app = app
+        self.manager = manager
+        _installationCoordinator = StateObject(wrappedValue: InstallationCoordinator(storage: manager.storage))
+    }
 
     private var state: PackageDownloadState { manager.state(for: app) }
 
@@ -60,6 +70,27 @@ struct DownloadFlowSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .task {
+            await installationCoordinator.refreshBackendOptions()
+            if selectedBackendIdentifier.isEmpty {
+                selectedBackendIdentifier = installationCoordinator.automaticBackendIdentifier() ?? ""
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { installationCoordinator.pendingHandoffPackage != nil },
+            set: { presented in
+                if !presented, case .awaitingHandoff = installationCoordinator.state {
+                    installationCoordinator.completeExternalHandoff(completed: false, destination: nil, error: nil)
+                }
+            }
+        )) {
+            if let package = installationCoordinator.pendingHandoffPackage {
+                ExternalPackageShareSheet(package: package) { destination, completed, error in
+                    installationCoordinator.completeExternalHandoff(completed: completed, destination: destination, error: error)
+                }
+                .ignoresSafeArea()
+            }
+        }
     }
 
     private var sheetTitle: String {
@@ -128,18 +159,131 @@ struct DownloadFlowSheet: View {
             .buttonStyle(.bordered).accessibilityHint("Cancels the transfer and removes its temporary file.")
     }
 
+    @ViewBuilder
     private func readyState(_ package: VerifiedPackage) -> some View {
+        switch installationCoordinator.state {
+        case .ready:
+            if showingInstallConfirmation { installationConfirmation(package) }
+            else { packageReady(package) }
+        case .preparingInstallation:
+            progressState(title: "Preparing Installation", message: "Rechecking the saved checksum and IPA metadata.", symbol: "checkmark.shield") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .installing:
+            progressState(title: "Preparing Handoff", message: "The verified package is being prepared for the selected method.", symbol: "square.and.arrow.up") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .awaitingHandoff:
+            progressState(title: "Choose a Destination", message: "The system share sheet will hand off this verified IPA. DreyzeStore cannot confirm that the receiving app installs it.", symbol: "square.and.arrow.up") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .handedOff(let receipt):
+            outcomeState(title: "Handed Off", message: "The package was handed to \(receipt.destination ?? receipt.method). Installation was not confirmed.", symbol: "checkmark.circle.fill", isSuccess: true)
+        case .installed(let installed):
+            outcomeState(title: "Installed", message: "\(installed.bundleIdentifier) version \(installed.version) was confirmed by the installation backend.", symbol: "checkmark.circle.fill", isSuccess: true)
+        case .failed(let failure), .unsupported(let failure):
+            installationFailureState(failure)
+        case .cancelled:
+            outcomeState(title: "Handoff Cancelled", message: "No installation was reported.", symbol: "xmark.circle", isSuccess: false) {
+                Button("Back to Package") {
+                    showingInstallConfirmation = false
+                    installationCoordinator.reset()
+                }.buttonStyle(.borderedProminent).tint(StorePalette.accent)
+            }
+        }
+    }
+
+    private func packageReady(_ package: VerifiedPackage) -> some View {
         VStack(spacing: 18) {
             Image(systemName: "checkmark.shield.fill").font(.system(size: 48)).foregroundStyle(StorePalette.accent)
                 .frame(width: 92, height: 92).background(StorePalette.accent.opacity(0.1), in: Circle())
             Text("Package Ready").font(.title2.bold())
             Text("Package downloaded and verified.").font(.body).foregroundStyle(.secondary)
-            Text("Installation backend is not connected yet.").font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            Text("Installation method: \(installationCoordinator.availableBackendOptions.first(where: { $0.identifier == selectedBackendIdentifier })?.displayName ?? "Not available")")
+                .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
             if let record = manager.packages.first(where: { $0.id == package.localURL.deletingPathExtension().lastPathComponent }) {
                 NavigationLink("View Package Details") { DownloadedPackageDetailsView(package: record) }
-                    .buttonStyle(.borderedProminent).tint(StorePalette.accent)
+                    .buttonStyle(.bordered)
             }
+            Button("Install") {
+                showingInstallConfirmation = true
+            }
+            .buttonStyle(.borderedProminent).tint(StorePalette.accent)
+            .disabled(installationCoordinator.availableBackendOptions.isEmpty)
             Button("Done") { dismiss() }.buttonStyle(.bordered)
+        }
+        .frame(maxWidth: 360).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func installationConfirmation(_ package: VerifiedPackage) -> some View {
+        let available = installationCoordinator.availableBackendOptions
+        return VStack(alignment: .leading, spacing: 18) {
+            Text("Install “\(app.name)”?").font(.title2.bold()).fixedSize(horizontal: false, vertical: true)
+            VStack(spacing: 0) {
+                detailLine("Version", package.version)
+                detailLine("Bundle ID", package.bundleIdentifier)
+                detailLine("Developer", app.developer.name)
+                detailLine("Size", ByteCountFormatter.string(fromByteCount: package.size, countStyle: .file))
+                detailLine("Source", app.repositoryName)
+                detailLine("Installation Method", available.first(where: { $0.identifier == selectedBackendIdentifier })?.displayName ?? "Unavailable")
+            }
+            .padding(.horizontal, 14)
+            .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            Text("Package verified. Sharing it to another app does not confirm installation.")
+                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if available.count > 1 {
+                Picker("Installation Method", selection: $selectedBackendIdentifier) {
+                    ForEach(available) { option in Text(option.displayName).tag(option.identifier) }
+                }
+                .pickerStyle(.menu)
+            }
+            if available.isEmpty {
+                StoreEmptyState(symbol: "exclamationmark.shield", title: "No Available Method", message: "No installation or handoff method is available in this environment.")
+            }
+            Spacer(minLength: 0)
+            HStack(spacing: 12) {
+                Button("Cancel", role: .cancel) { showingInstallConfirmation = false }
+                    .buttonStyle(.bordered).frame(maxWidth: .infinity)
+                Button("Install") {
+                    Task { await installationCoordinator.beginInstall(package: package, backendIdentifier: selectedBackendIdentifier.isEmpty ? installationCoordinator.automaticBackendIdentifier() : selectedBackendIdentifier) }
+                }
+                .buttonStyle(.borderedProminent).tint(StorePalette.accent).frame(maxWidth: .infinity)
+                .disabled(available.isEmpty || selectedBackendIdentifier.isEmpty)
+            }
+        }
+        .frame(maxWidth: 380, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func outcomeState<Actions: View>(title: String, message: String, symbol: String, isSuccess: Bool, @ViewBuilder actions: () -> Actions = { EmptyView() }) -> some View {
+        VStack(spacing: 18) {
+            Image(systemName: symbol).font(.system(size: 48)).foregroundStyle(isSuccess ? StorePalette.accent : Color.secondary)
+                .frame(width: 92, height: 92).background(StorePalette.accent.opacity(0.1), in: Circle())
+            Text(title).font(.title2.bold())
+            Text(message).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            actions()
+            Button("Done") { dismiss() }.buttonStyle(.bordered)
+        }
+        .frame(maxWidth: 360).frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func installationFailureState(_ failure: InstallationFailure) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "exclamationmark.shield.fill").font(.system(size: 44)).foregroundStyle(.orange)
+                .frame(width: 88, height: 88).background(.orange.opacity(0.10), in: Circle())
+            Text(failure.title).font(.title2.bold()).multilineTextAlignment(.center)
+            Text(failure.userMessage).font(.body).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            DisclosureGroup("Show Details", isExpanded: $showInstallationFailureDetails) {
+                Text(failure.technicalDetails).font(.caption.monospaced()).foregroundStyle(.secondary).textSelection(.enabled).padding(.top, 6)
+            }
+            .font(.footnote).tint(StorePalette.accent)
+            Spacer(minLength: 0)
+            HStack(spacing: 12) {
+                Button("Done") { dismiss() }.buttonStyle(.bordered).frame(maxWidth: .infinity)
+                Button("Try Again") {
+                    showingInstallConfirmation = true
+                    installationCoordinator.reset()
+                }.buttonStyle(.borderedProminent).tint(StorePalette.accent).frame(maxWidth: .infinity)
+            }
         }
         .frame(maxWidth: 360).frame(maxWidth: .infinity, maxHeight: .infinity)
     }

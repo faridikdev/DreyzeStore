@@ -18,7 +18,7 @@ struct SettingsView: View {
                     NavigationLink { SimpleSettingsView(title: "Downloads", symbol: "arrow.down.to.line", message: "Download progress is shown while a package is being prepared. Verified packages are available in Library.") } label: { Label("Downloads", systemImage: "arrow.down.to.line") }
                 }
                 Section("Store") {
-                    NavigationLink { SimpleSettingsView(title: "Installation", symbol: "square.and.arrow.down", message: "No installation backend is connected in this version. DreyzeStore will show only methods supported by your device when one is configured.") } label: { Label("Installation", systemImage: "square.and.arrow.down") }
+                    NavigationLink { InstallationSettingsView() } label: { Label("Installation", systemImage: "square.and.arrow.down") }
                     NavigationLink { SimpleSettingsView(title: "Sources", symbol: "externaldrive.connected.to.line.below", message: "This build reads the configured DreyzeStore catalog. Adding and managing repositories will be available in a later phase.") } label: { Label("Sources", systemImage: "externaldrive.connected.to.line.below") }
                     NavigationLink { StorageSettingsView() } label: { Label("Storage", systemImage: "internaldrive") }
                 }

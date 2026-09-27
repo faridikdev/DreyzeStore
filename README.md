@@ -2,13 +2,13 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 4 adds cancellable background-compatible IPA downloads, SHA-256 verification, and bounded ZIP/IPA metadata inspection.** Packages are only reported ready after validation; installation adapters, admin login/editing, and production deployment remain future work.
+DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 5 adds a VerifiedPackage-only installation boundary and a system share-sheet handoff.** Packages are never reported as installed just because another app received them; administrator authentication/editing and production deployment remain future work.
 
 An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
 
 ## Architecture
 
-- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, and a managed download/verification pipeline. No installation backend is connected.
+- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, a managed download/verification pipeline, and system handoff of a verified IPA. The app does not claim installation success from the handoff.
 - `backend`: TypeScript Cloudflare Worker using Hono, local D1 migrations, and local R2 bindings for eventual public assets and private staging. App summaries include a bounded short description so catalog cards do not fetch detail records one by one.
 - `admin`: React, TypeScript, and Vite static administration client. Phase 1 performs an API health check; write workflows and authentication are deferred.
 - `shared`: repository JSON Schema v1 and shared API DTOs.
@@ -73,7 +73,7 @@ Repository v1 is JSON Schema Draft 2020-12 at [shared/schemas/repository-v1.sche
 
 ## Installation backends
 
-The app defines `InstallationBackend` only. There are no TrollStore, TrollStore Lite, signing, marketplace, or external installer adapters yet; no exploit code is included. See [installation.md](docs/installation.md) for the current status and platform constraints.
+Installation accepts only a `VerifiedPackage`; the coordinator checks the managed storage receipt and repeats SHA-256 and IPA metadata validation before invoking a backend. On ordinary sandboxed iOS, the only currently available action is sharing that verified IPA to another app through the system share sheet. DreyzeStore reports **Handed Off** when the selected activity completes; it does not claim the app was installed. TrollStore, TrollStore Lite, developer signing, app inventory, and uninstall remain unavailable or require local configuration. No exploit code or upstream TrollStore source is included. See [installation.md](docs/installation.md) for the backend matrix and upstream research.
 
 ## Security
 

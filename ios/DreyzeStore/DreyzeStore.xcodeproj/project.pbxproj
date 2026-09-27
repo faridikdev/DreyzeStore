@@ -42,6 +42,12 @@
 		000000000000000000000223 /* PackagePipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000012C /* PackagePipelineTests.swift */; };
 		000000000000000000000224 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000901 /* ZIPFoundation */; };
 		000000000000000000000225 /* ZIPFoundation in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000000902 /* ZIPFoundation */; };
+		000000000000000000000226 /* InstallationBackends.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000012D /* InstallationBackends.swift */; };
+		000000000000000000000227 /* InstallationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000012E /* InstallationCoordinator.swift */; };
+		000000000000000000000228 /* InstallationHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000012F /* InstallationHistoryStore.swift */; };
+		000000000000000000000229 /* ExternalPackageShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000130 /* ExternalPackageShareSheet.swift */; };
+		00000000000000000000022A /* InstallationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000131 /* InstallationSettingsView.swift */; };
+		00000000000000000000022B /* InstallationBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000132 /* InstallationBackendTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +96,12 @@
 		00000000000000000000012A /* PackageValidator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageValidator.swift; sourceTree = "<group>"; };
 		00000000000000000000012B /* DownloadViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DownloadViews.swift; sourceTree = "<group>"; };
 		00000000000000000000012C /* PackagePipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackagePipelineTests.swift; sourceTree = "<group>"; };
+		00000000000000000000012D /* InstallationBackends.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationBackends.swift; sourceTree = "<group>"; };
+		00000000000000000000012E /* InstallationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationCoordinator.swift; sourceTree = "<group>"; };
+		00000000000000000000012F /* InstallationHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationHistoryStore.swift; sourceTree = "<group>"; };
+		000000000000000000000130 /* ExternalPackageShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalPackageShareSheet.swift; sourceTree = "<group>"; };
+		000000000000000000000131 /* InstallationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationSettingsView.swift; sourceTree = "<group>"; };
+		000000000000000000000132 /* InstallationBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationBackendTests.swift; sourceTree = "<group>"; };
 		000000000000000000000115 /* DreyzeStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000116 /* DreyzeStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreyzeStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -131,7 +143,7 @@
 		000000000000000000000016 /* Repositories */ = {isa = PBXGroup; children = (000000000000000000000109, 000000000000000000000117,); path = Repositories; sourceTree = "<group>"; };
 		000000000000000000000017 /* Persistence */ = {isa = PBXGroup; children = (00000000000000000000010A,); path = Persistence; sourceTree = "<group>"; };
 		000000000000000000000018 /* Security */ = {isa = PBXGroup; children = (00000000000000000000010B, 00000000000000000000012A,); path = Security; sourceTree = "<group>"; };
-		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C,); path = Installation; sourceTree = "<group>"; };
+		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C, 00000000000000000000012D, 00000000000000000000012E, 00000000000000000000012F, 000000000000000000000130, 000000000000000000000131,); path = Installation; sourceTree = "<group>"; };
 		000000000000000000000035 /* Downloads */ = {isa = PBXGroup; children = (000000000000000000000126, 000000000000000000000127, 000000000000000000000128, 000000000000000000000129, 00000000000000000000012B,); path = Downloads; sourceTree = "<group>"; };
 		00000000000000000000001A /* Utilities */ = {isa = PBXGroup; children = (00000000000000000000010D,); path = Utilities; sourceTree = "<group>"; };
 		00000000000000000000001B /* Components */ = {isa = PBXGroup; children = (000000000000000000000119,); path = Components; sourceTree = "<group>"; };
@@ -154,7 +166,7 @@
 		000000000000000000000032 /* Search */ = {isa = PBXGroup; children = (000000000000000000000111,); path = Search; sourceTree = "<group>"; };
 		000000000000000000000033 /* Updates */ = {isa = PBXGroup; children = (000000000000000000000112,); path = Updates; sourceTree = "<group>"; };
 		000000000000000000000034 /* Library */ = {isa = PBXGroup; children = (000000000000000000000113,); path = Library; sourceTree = "<group>"; };
-		000000000000000000000022 /* Tests */ = {isa = PBXGroup; children = (000000000000000000000114, 000000000000000000000123, 00000000000000000000012C,); path = Tests; sourceTree = "<group>"; };
+		000000000000000000000022 /* Tests */ = {isa = PBXGroup; children = (000000000000000000000114, 000000000000000000000123, 00000000000000000000012C, 000000000000000000000132,); path = Tests; sourceTree = "<group>"; };
 		000000000000000000000023 /* Products */ = {isa = PBXGroup; children = (000000000000000000000115, 000000000000000000000116,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -235,10 +247,15 @@
 				000000000000000000000220,
 				000000000000000000000221,
 				000000000000000000000222,
+				000000000000000000000226,
+				000000000000000000000227,
+				000000000000000000000228,
+				000000000000000000000229,
+				00000000000000000000022A,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000000603 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000214, 00000000000000000000021B, 000000000000000000000223,); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000603 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000214, 00000000000000000000021B, 000000000000000000000223, 00000000000000000000022B,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
