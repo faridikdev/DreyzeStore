@@ -1,0 +1,24 @@
+# Licenses
+
+The DreyzeStore source is distributed under the root MIT license. That license does not grant rights to upload, host, modify, or redistribute third-party applications, screenshots, icons, or repository content. A release must have the publisher's authorization recorded before publication.
+
+No TrollStore or TrollStore Lite source or binary is included in this repository. Phase 0 research used official upstream sources and is documented in the architecture and installation decision records. A future integration requires a separate license and source review; upstream notices must be preserved.
+
+## Phase 1 direct dependencies
+
+License identifiers below are from the resolved package metadata/notice files installed from the checked-in npm lockfile. Transitive packages retain their own terms and notices.
+
+| Component | Purpose | License |
+|---|---|---|
+| Hono | Worker HTTP routing | MIT |
+| Ajv, ajv-formats | JSON Schema validation | MIT |
+| React, React DOM, Vite, `@vitejs/plugin-react` | Admin web application | MIT |
+| Wrangler | Local Worker tooling and dry-run bundling | MIT OR Apache-2.0 |
+| `@cloudflare/workers-types` | Worker TypeScript bindings | MIT OR Apache-2.0 |
+| TypeScript | Type checking | Apache-2.0 |
+| ESLint, typescript-eslint, Vitest, jsdom | Linting and tests | MIT |
+| `@types/node`, `@types/react`, `@types/react-dom`, `globals`, `@eslint/js` | Type/tooling support | MIT |
+
+The iOS target uses Apple system SDKs and has no third-party package dependency in Phase 1. The GitHub Actions workflow pins official GitHub-maintained actions to commit SHAs; review their upstream license notices when changing those pins.
+
+For the exact resolved dependency graph, consult `package-lock.json` and each package's included license/notice file.
