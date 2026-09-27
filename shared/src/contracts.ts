@@ -84,18 +84,21 @@ export interface AppVersion {
   channel: "stable" | "beta";
 }
 
-export interface StoreApp {
+export interface StoreAppSummary {
   id: string;
   bundleIdentifier: string;
   name: string;
   developer: Developer;
   category: Category;
-  description: string;
   iconURL: string;
-  screenshots: Screenshot[];
   currentVersion: AppVersion;
   repositoryIdentifier: string;
   repositoryName: string;
+}
+
+export interface StoreApp extends StoreAppSummary {
+  description: string;
+  screenshots: Screenshot[];
 }
 
 export interface RepositorySource {
@@ -136,7 +139,22 @@ export interface ApiEnvelope<T> {
   meta?: {
     requestId?: string;
     nextCursor?: string | null;
+    page?: number;
+    pageSize?: number;
+    hasMore?: boolean;
   };
+}
+
+export interface FeaturedSection {
+  key: string;
+  title: string;
+  items: StoreAppSummary[];
+}
+
+export interface UpdateAvailable {
+  app: StoreAppSummary;
+  installedVersion: string;
+  latestVersion: AppVersion;
 }
 
 export interface ApiErrorEnvelope {

@@ -9,6 +9,7 @@ export type {
   Category,
   Developer,
   DeviceCapabilities,
+  FeaturedSection,
   InstalledApplication,
   InstallationCapability,
   RepositoryApp,
@@ -18,4 +19,7 @@ export type {
   RepositoryVersion,
   Screenshot,
   StoreApp,
+  StoreAppSummary,
+  UpdateAvailable,
 } from "./contracts.js";
+export { compareSemanticVersions, isSemanticVersion } from "./semver.js";
