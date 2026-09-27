@@ -16,6 +16,7 @@ export interface AppRow {
   bundle_identifier: unknown;
   app_name: unknown;
   app_description: unknown;
+  app_short_description: unknown;
   icon_object_key: unknown;
   app_updated_at: unknown;
   app_created_at: unknown;
@@ -78,6 +79,7 @@ const APP_COLUMNS = `
   a.bundle_identifier,
   a.name AS app_name,
   a.description AS app_description,
+  a.short_description AS app_short_description,
   a.icon_object_key,
   a.updated_at AS app_updated_at,
   a.created_at AS app_created_at,

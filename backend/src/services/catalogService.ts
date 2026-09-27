@@ -229,7 +229,9 @@ function mapAppSummary(row: AppRow, latest: InternalVersion, assetBase: URL): St
     id: requiredId(row.app_id),
     bundleIdentifier: requiredBundleIdentifier(row.bundle_identifier),
     name: requiredString(row.app_name, 160),
-    shortDescription: descriptionPreview(row.app_description),
+    shortDescription: row.app_short_description === ""
+      ? descriptionPreview(row.app_description)
+      : requiredString(row.app_short_description, 160),
     developer,
     category: {
       id: categoryId,

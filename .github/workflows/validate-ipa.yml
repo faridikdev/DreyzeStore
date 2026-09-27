@@ -1,0 +1,97 @@
+name: Validate private IPA upload
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_id:
+        description: Private DreyzeStore upload ID
+        required: true
+        type: string
+      dispatch_ticket:
+        description: One-run worker-issued validation ticket
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  lease:
+    name: Authorize one private package read
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      download_url: ${{ steps.lease.outputs.download_url }}
+      report_nonce: ${{ steps.lease.outputs.report_nonce }}
+      expected_size: ${{ steps.lease.outputs.expected_size }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Request a one-run validation lease
+        id: lease
+        env:
+          DREYZESTORE_API_BASE_URL: ${{ vars.DREYZESTORE_API_BASE_URL }}
+          DREYZESTORE_VALIDATOR_AUDIENCE: ${{ vars.DREYZESTORE_VALIDATOR_AUDIENCE }}
+          UPLOAD_ID: ${{ inputs.upload_id }}
+          DISPATCH_TICKET: ${{ inputs.dispatch_ticket }}
+        run: python scripts/validator_workflow.py lease --upload-id "$UPLOAD_ID" --dispatch-ticket "$DISPATCH_TICKET"
+
+  inspect:
+    name: Inspect package without cloud credentials
+    needs: lease
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      report_b64: ${{ steps.inspect.outputs.report_b64 }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download and inspect the single staged package
+        id: inspect
+        env:
+          DOWNLOAD_URL: ${{ needs.lease.outputs.download_url }}
+          REPORT_NONCE: ${{ needs.lease.outputs.report_nonce }}
+          EXPECTED_SIZE: ${{ needs.lease.outputs.expected_size }}
+        run: >-
+          python scripts/validator_workflow.py inspect
+          --download-url "$DOWNLOAD_URL"
+          --report-nonce "$REPORT_NONCE"
+          --expected-size "$EXPECTED_SIZE"
+
+  report:
+    name: Authenticate validator result
+    needs: [lease, inspect]
+    if: always() && needs.lease.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Submit bounded metadata report with GitHub OIDC identity
+        if: needs.inspect.result == 'success'
+        env:
+          DREYZESTORE_API_BASE_URL: ${{ vars.DREYZESTORE_API_BASE_URL }}
+          DREYZESTORE_VALIDATOR_AUDIENCE: ${{ vars.DREYZESTORE_VALIDATOR_AUDIENCE }}
+          UPLOAD_ID: ${{ inputs.upload_id }}
+          REPORT_NONCE: ${{ needs.lease.outputs.report_nonce }}
+          REPORT_B64: ${{ needs.inspect.outputs.report_b64 }}
+        run: >-
+          python scripts/validator_workflow.py report
+          --report-nonce "$REPORT_NONCE"
+          --report-b64 "$REPORT_B64"
+      - name: Mark a failed validator runner for administrator retry
+        if: needs.inspect.result != 'success'
+        env:
+          DREYZESTORE_API_BASE_URL: ${{ vars.DREYZESTORE_API_BASE_URL }}
+          DREYZESTORE_VALIDATOR_AUDIENCE: ${{ vars.DREYZESTORE_VALIDATOR_AUDIENCE }}
+          UPLOAD_ID: ${{ inputs.upload_id }}
+          REPORT_NONCE: ${{ needs.lease.outputs.report_nonce }}
+        run: >-
+          python scripts/validator_workflow.py report
+          --report-nonce "$REPORT_NONCE"
+          --error-code validator_runner_failed

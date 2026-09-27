@@ -19,6 +19,9 @@ EXPECTED_TABLES = {
     "upload_jobs",
     "rate_limit_buckets",
     "app_search",
+    "admin_password_credentials",
+    "admin_asset_uploads",
+    "distribution_rights_attestations",
 }
 EXPECTED_INDEXES = {
     "apps_published_updated_idx",
@@ -42,6 +45,11 @@ EXPECTED_INDEXES = {
     "versions_published_app_date_idx",
     "featured_active_order_idx",
     "featured_section_app_unique_idx",
+    "upload_jobs_admin_created_idx",
+    "upload_jobs_app_state_idx",
+    "admin_asset_uploads_app_idx",
+    "admin_asset_uploads_expiry_idx",
+    "rights_attestations_admin_idx",
 }
 
 
@@ -83,6 +91,46 @@ def validate() -> None:
     if "token" in session_columns or "password" in session_columns:
         raise RuntimeError("Admin session metadata must not persist bearer tokens or passwords.")
 
+    credential_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(admin_password_credentials)")
+    }
+    required_credential_columns = {
+        "password_hash", "password_salt", "iterations", "algorithm", "memory_kib", "parallelism"
+    }
+    if "password" in credential_columns or not required_credential_columns.issubset(credential_columns):
+        raise RuntimeError("Admin credentials must store only a password hash and bounded KDF metadata.")
+
+    try:
+        connection.execute(
+            "INSERT INTO admin_password_credentials (admin_user_id, password_hash, password_salt, iterations) "
+            "VALUES ('missing-admin', 'x', 'x', 1)"
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise RuntimeError("Credential hash, salt, iteration, or foreign key constraints are missing.")
+
+    connection.execute("INSERT INTO admin_users (id, provider, subject, role) VALUES ('kdf-check', 'password', 'kdf-check@example.test', 'admin')")
+    invalid_kdf_values = [
+        ("argon2id-v1", 600000, 19456, 1),
+        ("argon2id-v1", 2, 19455, 1),
+        ("argon2id-v1", 2, 19456, 2),
+        ("PBKDF2-HMAC-SHA256", 599999, 19456, 1),
+    ]
+    for algorithm, iterations, memory_kib, parallelism in invalid_kdf_values:
+        try:
+            connection.execute(
+                "INSERT INTO admin_password_credentials "
+                "(admin_user_id, password_hash, password_salt, algorithm, iterations, memory_kib, parallelism) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                ("kdf-check", "a" * 64, "b" * 64, algorithm, iterations, memory_kib, parallelism),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise RuntimeError("Admin credential KDF parameters bypassed their database constraints.")
+    connection.execute("DELETE FROM admin_users WHERE id = 'kdf-check'")
+
     connection.execute("INSERT INTO developers (id, name) VALUES ('test-developer', 'Authorized Test Publisher')")
     connection.execute(
         "INSERT INTO repositories (id, identifier, name, manifest_url, trust_level) "
@@ -94,6 +142,29 @@ def validate() -> None:
         "icon_object_key, repository_id) VALUES ('test-app', 'org.example.app', 'Test App', "
         "'test-developer', 'utilities', 'Migration constraint fixture.', 'icons/test-app.png', 'test-repository')"
     )
+    connection.execute("INSERT INTO admin_users (id, provider, subject, role) VALUES ('migration-admin', 'password', 'migration@example.test', 'admin')")
+    for state in ("invalid-state", "ready_for_review", "published"):
+        try:
+            connection.execute(
+                "INSERT INTO upload_jobs (id, admin_user_id, app_id, staging_object_key, state, expected_size, "
+                "validator_nonce_sha256, expires_at) VALUES (?, 'migration-admin', 'test-app', ?, ?, 1, ?, "
+                "'2099-01-01T00:00:00.000Z')",
+                ("invalid-upload-" + state, "staging/invalid-" + state + "/package.ipa", state, "a" * 64),
+            )
+        except sqlite3.IntegrityError:
+            pass
+        else:
+            raise RuntimeError(f"The upload state {state!r} bypassed required release constraints.")
+
+    try:
+        connection.execute(
+            "INSERT INTO admin_asset_uploads (id, admin_user_id, app_id, kind, staging_object_key, expected_size, content_type, state, expires_at) "
+            "VALUES ('missing-alt', 'migration-admin', 'test-app', 'screenshot', 'staging-assets/missing-alt/asset', 8, 'image/png', 'uploading', '2099-01-01T00:00:00.000Z')"
+        )
+    except sqlite3.IntegrityError:
+        pass
+    else:
+        raise RuntimeError("Screenshot alt text is not constrained in the asset-upload schema.")
     try:
         connection.execute(
             "INSERT INTO versions (id, app_id, version, build, minimum_ios, ipa_object_key, sha256, size) "
@@ -199,7 +270,34 @@ def validate_existing_search_backfill() -> None:
     connection.close()
 
 
+def validate_legacy_password_migration() -> None:
+    migrations = sorted(MIGRATIONS.glob("*.sql"))
+    if len(migrations) < 4:
+        raise RuntimeError("The Argon2id credential migration is missing.")
+
+    connection = sqlite3.connect(":memory:")
+    connection.execute("PRAGMA foreign_keys = ON")
+    for migration in migrations[:3]:
+        connection.executescript(migration.read_text(encoding="utf-8"))
+    connection.execute(
+        "INSERT INTO admin_users (id, provider, subject, role) VALUES ('legacy-admin', 'password', 'legacy@example.test', 'admin')"
+    )
+    connection.execute(
+        "INSERT INTO admin_password_credentials (admin_user_id, password_hash, password_salt, algorithm, iterations) "
+        "VALUES ('legacy-admin', ?, ?, 'PBKDF2-HMAC-SHA256', 600000)",
+        ("a" * 64, "b" * 64),
+    )
+    connection.executescript(migrations[3].read_text(encoding="utf-8"))
+    migrated = connection.execute(
+        "SELECT algorithm, iterations, memory_kib, parallelism FROM admin_password_credentials WHERE admin_user_id = 'legacy-admin'"
+    ).fetchone()
+    if migrated != ("PBKDF2-HMAC-SHA256", 600000, 19456, 1):
+        raise RuntimeError("The existing PBKDF2 bootstrap credential was not safely preserved for login rehash.")
+    connection.close()
+
+
 if __name__ == "__main__":
     validate()
     validate_existing_search_backfill()
+    validate_legacy_password_migration()
     print("D1 migrations: schema and integrity checks passed.")

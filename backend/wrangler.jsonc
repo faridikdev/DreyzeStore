@@ -3,10 +3,21 @@
   "name": "dreyzestore-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-27",
+  "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": {
     "ADMIN_ORIGINS": "http://localhost:5173",
-    "PUBLIC_ASSETS_BASE_URL": "https://assets.dreyzestore.invalid"
+    "PUBLIC_ASSETS_BASE_URL": "https://assets.dreyzestore.invalid",
+    "PUBLIC_API_BASE_URL": "https://api.dreyzestore.invalid",
+    "PUBLIC_BUCKET_NAME": "dreyzestore-assets-local",
+    "STAGING_BUCKET_NAME": "dreyzestore-staging-local",
+    "GITHUB_OWNER": "faridikdev",
+    "GITHUB_REPOSITORY": "DreyzeStore",
+    "GITHUB_VALIDATOR_WORKFLOW": "validate-ipa.yml",
+    "GITHUB_VALIDATOR_REF": "main",
+    "VALIDATOR_API_BASE_URL": "http://127.0.0.1:8787",
+    "VALIDATOR_OIDC_AUDIENCE": "https://dreyzestore.invalid/validator",
+    "VALIDATOR_OIDC_JWKS_URL": "https://token.actions.githubusercontent.com/.well-known/jwks"
   },
   "d1_databases": [
     {
@@ -25,5 +36,13 @@
       "binding": "STAGING_ASSETS",
       "bucket_name": "dreyzestore-staging-local"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "name": "PASSWORD_KDF", "class_name": "AdminPasswordKdf" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["AdminPasswordKdf"] }
   ]
 }

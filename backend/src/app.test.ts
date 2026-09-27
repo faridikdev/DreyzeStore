@@ -39,6 +39,10 @@ function createEnvironment(database: DatabaseSync): WorkerEnvironment {
 
   return {
     DB: d1,
+    PASSWORD_KDF: {
+      idFromName(name: string) { return { name }; },
+      get() { return { async fetch() { throw new Error("The catalog API test must not call password authentication."); } }; },
+    } as unknown as DurableObjectNamespace,
     PUBLIC_ASSETS: {} as R2Bucket,
     STAGING_ASSETS: {} as R2Bucket,
     ADMIN_ORIGINS: "http://localhost:5173",

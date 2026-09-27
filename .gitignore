@@ -1,6 +1,9 @@
 # JavaScript / TypeScript dependencies and build output
 node_modules/
 **/node_modules/
+__pycache__/
+**/__pycache__/
+*.py[cod]
 dist/
 **/dist/
 coverage/

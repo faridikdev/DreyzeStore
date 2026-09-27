@@ -23,6 +23,7 @@ jobs:
       - run: npm run typecheck --workspace @dreyzestore/shared
       - run: npm run typecheck --workspace @dreyzestore/api
       - run: npm test
+      - run: npm run validator:test
       - run: python scripts/validate_migrations.py
       - run: npm run build --workspace @dreyzestore/api
 

@@ -2,7 +2,19 @@ import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { WorkerEnvironment } from "./env.js";
 
-export type ApiVariables = { requestId: string };
+export interface AdminPrincipal {
+  id: string;
+  email: string;
+  role: "admin" | "editor";
+}
+
+export type ApiVariables = {
+  requestId: string;
+  admin: AdminPrincipal;
+  adminSessionHash: string;
+  adminCsrfHash: string;
+  adminSessionExpiresAt: string;
+};
 export type ApiContext = Context<{ Bindings: WorkerEnvironment; Variables: ApiVariables }>;
 
 export class ApiError extends Error {
