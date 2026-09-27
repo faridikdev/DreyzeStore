@@ -2,7 +2,9 @@ use crate::{
     error::{CompanionError, Result},
     models::{PackageMetadata, SignedPackage, SignedPackageInfo, SigningStatus, ValidatedPackage},
     package::validator::PackageValidator,
-    security::secrets::SigningIdentityVault,
+    security::secrets::{
+        P12Certificate, SigningIdentityVault, SigningMaterial, inspect_p12_certificates,
+    },
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -22,6 +24,7 @@ const MAX_PASSWORD_BYTES: usize = 2048;
 #[async_trait]
 pub trait SigningProvider: Send + Sync {
     fn validate_provisioning(&self, package: &ValidatedPackage, target_udid: &str) -> Result<()>;
+    fn validate_device(&self, target_udid: &str) -> Result<()>;
     async fn sign(&self, package: &ValidatedPackage, target_udid: &str) -> Result<SignedPackage>;
     fn status(&self) -> SigningStatus;
 }
@@ -87,6 +90,32 @@ impl AppleDevelopmentSigningProvider {
         ]
     }
 
+    fn load_validated_identity(
+        &self,
+    ) -> Result<(SigningMaterial, ProvisioningProfile, P12Certificate)> {
+        let material = self.vault.load()?;
+        let profile = parse_mobileprovision(&material.mobileprovision)?;
+        let certificates = inspect_p12_certificates(&material.p12, &material.password)?;
+        let certificate = certificates
+            .into_iter()
+            .find(|certificate| profile.authorizes_certificate(&certificate.der))
+            .ok_or_else(|| {
+                CompanionError::Operation(
+                    "the P12 Apple Development certificate is not authorized by the imported provisioning profile".into(),
+                )
+            })?;
+        Ok((material, profile, certificate))
+    }
+
+    fn validate_certificate_current(certificate: &P12Certificate) -> Result<()> {
+        if certificate.expires_at <= Utc::now() {
+            return Err(CompanionError::Operation(
+                "the Apple Development certificate has expired".into(),
+            ));
+        }
+        Ok(())
+    }
+
     async fn run_signer(&self, args: &[String], password: &mut Zeroizing<String>) -> Result<()> {
         if !self.zsign.is_file() {
             return Err(CompanionError::Operation(
@@ -138,14 +167,20 @@ impl AppleDevelopmentSigningProvider {
 #[async_trait]
 impl SigningProvider for AppleDevelopmentSigningProvider {
     fn validate_provisioning(&self, package: &ValidatedPackage, target_udid: &str) -> Result<()> {
-        let material = self.vault.load()?;
-        let profile = parse_mobileprovision(&material.mobileprovision)?;
+        let (_material, profile, certificate) = self.load_validated_identity()?;
+        Self::validate_certificate_current(&certificate)?;
         validate_profile(&profile, &package.metadata.bundle_identifier, target_udid)
     }
 
+    fn validate_device(&self, target_udid: &str) -> Result<()> {
+        let (_material, profile, certificate) = self.load_validated_identity()?;
+        Self::validate_certificate_current(&certificate)?;
+        validate_profile_device(&profile, target_udid)
+    }
+
     async fn sign(&self, package: &ValidatedPackage, target_udid: &str) -> Result<SignedPackage> {
-        let material = self.vault.load()?;
-        let profile = parse_mobileprovision(&material.mobileprovision)?;
+        let (material, profile, certificate) = self.load_validated_identity()?;
+        Self::validate_certificate_current(&certificate)?;
         validate_profile(&profile, &package.metadata.bundle_identifier, target_udid)?;
         fs::create_dir_all(&self.package_root)?;
         let job = self.package_root.join(Uuid::new_v4().to_string());
@@ -187,6 +222,8 @@ impl SigningProvider for AppleDevelopmentSigningProvider {
             original_sha256: package.metadata.sha256.clone(),
             signed_sha256: signed_metadata.sha256,
             signing_identity: profile.name,
+            team_identifier: Some(profile.team_id),
+            certificate_expires_at: Some(certificate.expires_at),
             provisioning_expiration: Some(profile.expiration),
             created_at: Utc::now(),
         };
@@ -198,50 +235,36 @@ impl SigningProvider for AppleDevelopmentSigningProvider {
     }
 
     fn status(&self) -> SigningStatus {
-        if !self.vault.is_configured() {
-            return SigningStatus::not_configured();
-        }
-        let material = match self.vault.load() {
-            Ok(value) => value,
-            Err(error) => {
-                return SigningStatus {
-                    configured: false,
-                    identity_label: None,
-                    certificate_expires_at: None,
-                    provisioning_expires_at: None,
-                    team_id: None,
-                    account_kind: None,
-                    limitation: Some(error.to_string()),
-                };
+        match self.load_validated_identity() {
+            Ok((_material, profile, certificate)) => {
+                let profile_expired = profile.expiration <= Utc::now();
+                let certificate_expired = certificate.expires_at <= Utc::now();
+                SigningStatus {
+                    configured: !profile_expired && !certificate_expired,
+                    identity_label: Some(profile.name),
+                    certificate_expires_at: Some(certificate.expires_at),
+                    provisioning_expires_at: Some(profile.expiration),
+                    team_id: Some(profile.team_id),
+                    account_kind: Some("Imported Apple Development identity".into()),
+                    limitation: Some(if certificate_expired {
+                        "The imported Apple Development certificate has expired. Import a current certificate and matching provisioning profile.".into()
+                    } else if profile_expired {
+                        "The imported provisioning profile has expired. Import a current profile for this iPhone and app identifier.".into()
+                    } else {
+                        "The local P12 certificate matches the imported provisioning profile. The connected device and requested app identifier are checked for each install. Apple Account provisioning is not automated on Windows.".into()
+                    }),
+                }
             }
-        };
-        let profile = match parse_mobileprovision(&material.mobileprovision) {
-            Ok(value) => value,
-            Err(error) => {
-                return SigningStatus {
-                    configured: false,
-                    identity_label: None,
-                    certificate_expires_at: None,
-                    provisioning_expires_at: None,
-                    team_id: None,
-                    account_kind: None,
-                    limitation: Some(error.to_string()),
-                };
-            }
-        };
-        let expired = profile.expiration <= Utc::now();
-        SigningStatus {
-            configured: !expired,
-            identity_label: Some(profile.name.clone()),
-            certificate_expires_at: None,
-            provisioning_expires_at: Some(profile.expiration),
-            team_id: Some(profile.team_id),
-            account_kind: Some("Imported local signing identity".into()),
-            limitation: Some(if expired {
-                "The imported provisioning profile has expired. Import a current profile for this iPhone and app identifier.".into()
-            } else {
-                "Windows Companion uses an imported Apple Development identity and provisioning profile. Free Personal Team provisioning is not automated by this Windows-only flow.".into()
-            }),
+            Err(_error) if !self.vault.is_configured() => SigningStatus::not_configured(),
+            Err(error) => SigningStatus {
+                configured: false,
+                identity_label: None,
+                certificate_expires_at: None,
+                provisioning_expires_at: None,
+                team_id: None,
+                account_kind: Some("Imported local signing identity".into()),
+                limitation: Some(error.to_string()),
+            },
         }
     }
 }
@@ -296,6 +319,10 @@ fn validate_profile(
             "the provisioning profile does not authorize this bundle identifier".into(),
         ));
     }
+    validate_profile_device(profile, target_udid)
+}
+
+fn validate_profile_device(profile: &ProvisioningProfile, target_udid: &str) -> Result<()> {
     if !profile
         .provisioned_devices
         .iter()
@@ -319,6 +346,7 @@ struct ProvisioningProfile {
     team_id: String,
     app_identifier: String,
     provisioned_devices: Vec<String>,
+    developer_certificates: Vec<Vec<u8>>,
     expiration: DateTime<Utc>,
 }
 
@@ -336,6 +364,12 @@ impl ProvisioningProfile {
             return bundle_id == prefix || bundle_id.starts_with(&format!("{prefix}."));
         }
         suffix == bundle_id && !self.team_id.is_empty()
+    }
+
+    fn authorizes_certificate(&self, certificate_der: &[u8]) -> bool {
+        self.developer_certificates
+            .iter()
+            .any(|allowed| allowed.as_slice() == certificate_der)
     }
 }
 
@@ -404,7 +438,15 @@ fn parse_mobileprovision(bytes: &[u8]) -> Result<ProvisioningProfile> {
         .filter_map(plist::Value::as_string)
         .map(ToOwned::to_owned)
         .collect();
-    if team_id.is_empty() || !app_identifier.contains('.') {
+    let developer_certificates = root
+        .get("DeveloperCertificates")
+        .and_then(plist::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(plist::Value::as_data)
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>();
+    if team_id.is_empty() || !app_identifier.contains('.') || developer_certificates.is_empty() {
         return Err(CompanionError::Operation(
             "provisioning profile metadata is incomplete".into(),
         ));
@@ -414,6 +456,7 @@ fn parse_mobileprovision(bytes: &[u8]) -> Result<ProvisioningProfile> {
         team_id,
         app_identifier,
         provisioned_devices,
+        developer_certificates,
         expiration,
     })
 }
@@ -475,10 +518,13 @@ mod tests {
             team_id: "TEAM123".into(),
             app_identifier: "TEAM123.com.example.*".into(),
             provisioned_devices: vec!["ABC123".into()],
+            developer_certificates: vec![vec![1, 2, 3]],
             expiration: Utc::now() + chrono::Duration::days(3),
         };
         assert!(profile.authorizes_bundle("com.example.reader"));
         assert!(!profile.authorizes_bundle("com.other.reader"));
+        assert!(profile.authorizes_certificate(&[1, 2, 3]));
+        assert!(!profile.authorizes_certificate(&[3, 2, 1]));
         assert!(
             profile
                 .provisioned_devices
@@ -494,6 +540,7 @@ mod tests {
             team_id: "TEAM123".into(),
             app_identifier: "TEAM123.org.dreyze.sample".into(),
             provisioned_devices: vec!["0123456789abcdef0123456789ABCDEF".into()],
+            developer_certificates: vec![vec![1, 2, 3]],
             expiration: Utc::now() - chrono::Duration::days(1),
         };
         assert!(
@@ -504,5 +551,67 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn expired_development_certificate_is_rejected() {
+        let certificate = P12Certificate {
+            der: vec![1, 2, 3],
+            expires_at: Utc::now() - chrono::Duration::seconds(1),
+        };
+        assert!(
+            AppleDevelopmentSigningProvider::validate_certificate_current(&certificate).is_err()
+        );
+    }
+
+    #[test]
+    fn mobileprovision_parser_extracts_team_bundle_device_certificate_and_expiry() {
+        let mut entitlements = plist::Dictionary::new();
+        entitlements.insert(
+            "application-identifier".into(),
+            plist::Value::String("TEAM123.org.dreyze.test.sample".into()),
+        );
+        let mut root = plist::Dictionary::new();
+        root.insert(
+            "Entitlements".into(),
+            plist::Value::Dictionary(entitlements),
+        );
+        root.insert(
+            "TeamIdentifier".into(),
+            plist::Value::Array(vec![plist::Value::String("TEAM123".into())]),
+        );
+        root.insert(
+            "Name".into(),
+            plist::Value::String("Dreyze Test Development".into()),
+        );
+        root.insert(
+            "ExpirationDate".into(),
+            plist::Value::Date(plist::Date::from(
+                std::time::SystemTime::now() + std::time::Duration::from_secs(3600),
+            )),
+        );
+        root.insert(
+            "ProvisionedDevices".into(),
+            plist::Value::Array(vec![plist::Value::String(
+                "0123456789abcdef0123456789abcdef".into(),
+            )]),
+        );
+        root.insert(
+            "DeveloperCertificates".into(),
+            plist::Value::Array(vec![plist::Value::Data(vec![1, 2, 3])]),
+        );
+        let mut bytes = Vec::new();
+        plist::Value::Dictionary(root)
+            .to_writer_xml(&mut bytes)
+            .unwrap();
+
+        let profile = parse_mobileprovision(&bytes).unwrap();
+        assert_eq!(profile.team_id, "TEAM123");
+        assert_eq!(profile.name, "Dreyze Test Development");
+        assert!(profile.authorizes_bundle("org.dreyze.test.sample"));
+        assert!(profile.authorizes_certificate(&[1, 2, 3]));
+        assert!(profile.expiration > Utc::now());
+        assert!(validate_profile_device(&profile, "0123456789abcdef0123456789abcdef").is_ok());
+        assert!(validate_profile_device(&profile, "ffffffffffffffffffffffffffffffff").is_err());
     }
 }

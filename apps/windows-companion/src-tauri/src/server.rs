@@ -61,6 +61,8 @@ struct ApiState {
 #[serde(rename_all = "camelCase")]
 struct InstallRecord {
     bundle_identifier: String,
+    #[serde(default)]
+    signed_bundle_identifier: String,
     version: String,
     build: String,
     minimum_os_version: Option<String>,
@@ -71,6 +73,10 @@ struct InstallRecord {
     original_file: String,
     installed_at: Option<chrono::DateTime<Utc>>,
     provisioning_expires_at: Option<chrono::DateTime<Utc>>,
+    #[serde(default)]
+    certificate_expires_at: Option<chrono::DateTime<Utc>>,
+    #[serde(default)]
+    team_identifier: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -233,7 +239,33 @@ async fn signing_status(State(state): State<ApiState>, headers: HeaderMap) -> Re
     if let Err(response) = authorize(&state, &headers) {
         return response;
     }
-    Json(state.signing.status()).into_response()
+    let mut status = state.signing.status();
+    if status.configured {
+        match state.devices.discover().await {
+            Ok(devices) => match devices.iter().find(|device| device.trusted) {
+                Some(device) => {
+                    if let Err(error) = state.signing.validate_device(&device.udid) {
+                        status.configured = false;
+                        status.limitation = Some(error.to_string());
+                    }
+                }
+                None => {
+                    status.configured = false;
+                    status.limitation = Some(
+                        "Connect and trust the target iPhone to verify its provisioning profile."
+                            .into(),
+                    );
+                }
+            },
+            Err(_) => {
+                status.configured = false;
+                status.limitation = Some(
+                    "The target iPhone could not be checked. Connect it over USB and run diagnostics in Windows Companion.".into(),
+                );
+            }
+        }
+    }
+    Json(status).into_response()
 }
 
 async fn install(State(state): State<ApiState>, headers: HeaderMap, body: Body) -> Response {
@@ -355,12 +387,12 @@ async fn install(State(state): State<ApiState>, headers: HeaderMap, body: Body) 
             .is_ok()
         {
             let installed_state = jobs.get(&expected.request_id);
-            let (installed_at, provisioning_expires_at) = match installed_state {
+            let (installed_at, signing_info) = match installed_state {
                 Some(InstallState::Installed {
                     installed_at,
                     signing,
                     ..
-                }) => (installed_at, signing.provisioning_expiration),
+                }) => (installed_at, signing),
                 _ => {
                     let _ = tokio::fs::remove_file(&path).await;
                     jobs.finish(&expected.request_id);
@@ -376,6 +408,7 @@ async fn install(State(state): State<ApiState>, headers: HeaderMap, body: Body) 
                 }
                 let record = InstallRecord {
                     bundle_identifier: expected.bundle_identifier.clone(),
+                    signed_bundle_identifier: expected.bundle_identifier.clone(),
                     version: expected.version.clone(),
                     build: expected.build.clone(),
                     minimum_os_version: expected.minimum_os_version.clone(),
@@ -385,7 +418,9 @@ async fn install(State(state): State<ApiState>, headers: HeaderMap, body: Body) 
                     udid,
                     original_file: original_name.clone(),
                     installed_at: Some(installed_at),
-                    provisioning_expires_at,
+                    provisioning_expires_at: signing_info.provisioning_expiration,
+                    certificate_expires_at: signing_info.certificate_expires_at,
+                    team_identifier: signing_info.team_identifier,
                 };
                 let mut records = state.records.write().await;
                 let previous = records
@@ -597,6 +632,9 @@ async fn refresh(
                 if let Some(current) = records.get_mut(&expected_for_run.bundle_identifier) {
                     current.installed_at = Some(installed_at);
                     current.provisioning_expires_at = signing.provisioning_expiration;
+                    current.certificate_expires_at = signing.certificate_expires_at;
+                    current.team_identifier = signing.team_identifier;
+                    current.signed_bundle_identifier = signing.bundle_identifier;
                     let _ = write_records(&state.storage_root, &records).await;
                 }
             }
@@ -1012,6 +1050,7 @@ mod tests {
             .unwrap();
         let record = InstallRecord {
             bundle_identifier: "org.example.app".into(),
+            signed_bundle_identifier: "org.example.app".into(),
             version: "1.0".into(),
             build: "1".into(),
             minimum_os_version: Some("16.0".into()),
@@ -1022,6 +1061,8 @@ mod tests {
             original_file: format!("{used_digest}.ipa"),
             installed_at: None,
             provisioning_expires_at: None,
+            certificate_expires_at: None,
+            team_identifier: None,
         };
         let records = HashMap::from([(record.bundle_identifier.clone(), record)]);
         tokio::fs::write(

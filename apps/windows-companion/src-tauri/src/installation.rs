@@ -323,6 +323,13 @@ mod tests {
                 Err(CompanionError::Operation("provisioning failed".into()))
             }
         }
+        fn validate_device(&self, _udid: &str) -> Result<()> {
+            if self.provisioning_succeeds {
+                Ok(())
+            } else {
+                Err(CompanionError::Operation("provisioning failed".into()))
+            }
+        }
         async fn sign(&self, package: &ValidatedPackage, _udid: &str) -> Result<SignedPackage> {
             self.called.store(true, Ordering::SeqCst);
             if !self.success {
@@ -337,6 +344,8 @@ mod tests {
                     original_sha256: package.metadata.sha256.clone(),
                     signed_sha256: package.metadata.sha256.clone(),
                     signing_identity: "test-only signer".into(),
+                    team_identifier: Some("TESTTEAM".into()),
+                    certificate_expires_at: Some(Utc::now() + chrono::Duration::days(30)),
                     provisioning_expiration: None,
                     created_at: Utc::now(),
                 },

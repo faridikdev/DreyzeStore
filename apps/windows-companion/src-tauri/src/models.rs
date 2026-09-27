@@ -42,6 +42,8 @@ pub struct SignedPackageInfo {
     pub original_sha256: String,
     pub signed_sha256: String,
     pub signing_identity: String,
+    pub team_identifier: Option<String>,
+    pub certificate_expires_at: Option<DateTime<Utc>>,
     pub provisioning_expiration: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
@@ -110,6 +112,35 @@ pub struct SigningStatus {
     pub team_id: Option<String>,
     pub account_kind: Option<String>,
     pub limitation: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReadinessStatus {
+    Pass,
+    Fail,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadinessCheck {
+    pub status: ReadinessStatus,
+    pub details: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceReadiness {
+    pub run_at: DateTime<Utc>,
+    pub apple_mobile_device_service: ReadinessCheck,
+    pub usb_connection: ReadinessCheck,
+    pub trust: ReadinessCheck,
+    pub developer_mode: ReadinessCheck,
+    pub pymobiledevice3: ReadinessCheck,
+    pub signing_identity: ReadinessCheck,
+    pub provisioning: ReadinessCheck,
+    pub dreyze_pairing: ReadinessCheck,
 }
 
 impl SigningStatus {

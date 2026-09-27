@@ -34,6 +34,40 @@ type Snapshot = {
   apiError?: string | null;
 };
 
+type ReadinessCheck = { status: "pass" | "fail" | "unknown"; details: string };
+type DeviceReadiness = {
+  runAt: string;
+  appleMobileDeviceService: ReadinessCheck;
+  usbConnection: ReadinessCheck;
+  trust: ReadinessCheck;
+  developerMode: ReadinessCheck;
+  pymobiledevice3: ReadinessCheck;
+  signingIdentity: ReadinessCheck;
+  provisioning: ReadinessCheck;
+  dreyzePairing: ReadinessCheck;
+};
+type TestPackageMetadata = {
+  bundleIdentifier: string;
+  version: string;
+  build: string;
+  size: number;
+  sha256: string;
+  minimumOSVersion?: string | null;
+  appName?: string | null;
+};
+type TestInstallation = {
+  bundleIdentifier: string;
+  version: string;
+  build: string;
+  sha256: string;
+  size: number;
+  udid: string;
+  teamIdentifier?: string | null;
+  certificateExpiresAt?: string | null;
+  provisioningExpiresAt?: string | null;
+  installedAt: string;
+};
+
 type PairingOffer = {
   payload: string;
   code: string;
@@ -60,6 +94,10 @@ export default function App() {
   const [section, setSection] = useState<Section>("overview");
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [readiness, setReadiness] = useState<DeviceReadiness | null>(null);
+  const [testInstallation, setTestInstallation] = useState<TestInstallation | null>(null);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [testingInstall, setTestingInstall] = useState(false);
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -69,12 +107,14 @@ export default function App() {
     if (refreshInFlight.current) return;
     refreshInFlight.current = true;
     try {
-      const [nextSnapshot, nextHistory] = await Promise.all([
+      const [nextSnapshot, nextHistory, nextTestInstallation] = await Promise.all([
         invoke<Snapshot>("get_dashboard_snapshot"),
         invoke<HistoryItem[]>("get_install_history"),
+        invoke<TestInstallation | null>("get_test_installation"),
       ]);
       setSnapshot(nextSnapshot);
       setHistory(nextHistory);
+      setTestInstallation(nextTestInstallation);
     } catch (error) {
       setNotice(String(error));
     } finally {
@@ -84,7 +124,7 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(() => void refresh(), 5000);
+    const timer = window.setInterval(() => void refresh(), 30000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
@@ -114,6 +154,53 @@ export default function App() {
       setNotice(String(error));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function runDiagnostics() {
+    if (diagnosing) return;
+    setDiagnosing(true);
+    try {
+      setReadiness(await invoke<DeviceReadiness>("get_device_readiness"));
+    } catch (error) {
+      setNotice(String(error));
+    } finally {
+      setDiagnosing(false);
+    }
+  }
+
+  async function runTestInstallation() {
+    if (testingInstall) return;
+    const path = await open({ multiple: false, filters: [{ name: "DreyzeStore test IPA", extensions: ["ipa"] }] });
+    if (typeof path !== "string") return;
+    setTestingInstall(true);
+    try {
+      const metadata = await invoke<TestPackageMetadata>("inspect_test_package", { path });
+      const size = `${(metadata.size / 1_048_576).toFixed(1)} MB`;
+      const accepted = window.confirm(
+        `Install and verify this authorized test app on the connected iPhone?\n\n${metadata.appName ?? metadata.bundleIdentifier}\n${metadata.bundleIdentifier}\nVersion ${metadata.version} (${metadata.build}) · ${size}\n\nOnly org.dreyzestore.test.* bundle IDs are accepted. The package is locally inspected, signed, installed, and confirmed through device inventory.`,
+      );
+      if (!accepted) return;
+      const installed = await invoke<TestInstallation>("run_test_installation", { path });
+      setTestInstallation(installed);
+      await refresh();
+      setNotice(`Test app ${installed.bundleIdentifier} ${installed.version} was confirmed in the iPhone inventory.`);
+    } catch (error) {
+      setNotice(String(error));
+    } finally {
+      setTestingInstall(false);
+    }
+  }
+
+  async function removeTestInstallation() {
+    if (!testInstallation || !window.confirm(`Remove the Companion test app ${testInstallation.bundleIdentifier} from the iPhone?`)) return;
+    try {
+      await invoke("uninstall_test_installation");
+      setTestInstallation(null);
+      await refresh();
+      setNotice("The test app was removed and absence was confirmed in device inventory.");
+    } catch (error) {
+      setNotice(String(error));
     }
   }
 
@@ -167,7 +254,18 @@ export default function App() {
           onForget={forgetPhone}
           onCopy={async (value) => { await navigator.clipboard.writeText(value); setNotice("Copied to clipboard."); }}
         />}
-        {section === "signing" && <Signing snapshot={snapshot} onChanged={refresh} onNotice={setNotice} />}
+        {section === "signing" && <Signing
+          snapshot={snapshot}
+          readiness={readiness}
+          diagnosing={diagnosing}
+          testingInstall={testingInstall}
+          testInstallation={testInstallation}
+          onChanged={refresh}
+          onNotice={setNotice}
+          onDiagnostics={runDiagnostics}
+          onTestInstall={runTestInstallation}
+          onRemoveTestInstall={removeTestInstallation}
+        />}
       </main>
     </div>
   );
@@ -256,7 +354,18 @@ function Setup({ snapshot, offer, busy, onPair, onForget, onCopy }: {
   </div>;
 }
 
-function Signing({ snapshot, onChanged, onNotice }: { snapshot: Snapshot | null; onChanged: () => Promise<void>; onNotice: (value: string) => void }) {
+function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstallation, onChanged, onNotice, onDiagnostics, onTestInstall, onRemoveTestInstall }: {
+  snapshot: Snapshot | null;
+  readiness: DeviceReadiness | null;
+  diagnosing: boolean;
+  testingInstall: boolean;
+  testInstallation: TestInstallation | null;
+  onChanged: () => Promise<void>;
+  onNotice: (value: string) => void;
+  onDiagnostics: () => void;
+  onTestInstall: () => void;
+  onRemoveTestInstall: () => void;
+}) {
   const [p12Path, setP12Path] = useState("");
   const [profilePath, setProfilePath] = useState("");
   const [password, setPassword] = useState("");
@@ -275,11 +384,11 @@ function Signing({ snapshot, onChanged, onNotice }: { snapshot: Snapshot | null;
     setBusy(true);
     try {
       await invoke("import_signing_identity", { p12Path, profilePath, password });
-      setPassword(""); setP12Path(""); setProfilePath("");
+      setP12Path(""); setProfilePath("");
       onNotice("Signing files were encrypted with DPAPI and the P12 password was saved in Windows Credential Manager.");
       await onChanged();
     } catch (error) { onNotice(String(error)); }
-    finally { setBusy(false); }
+    finally { setPassword(""); setBusy(false); }
   }
   async function remove() {
     if (!window.confirm("Remove the local signing identity from this PC?")) return;
@@ -289,7 +398,12 @@ function Signing({ snapshot, onChanged, onNotice }: { snapshot: Snapshot | null;
 
   return <div className="page-content narrow-content">
     <div className="page-heading"><div><div className="eyebrow">APPLE DEVELOPMENT</div><h1>Signing identity.</h1><p>All signing stays on this computer. DreyzeStore never asks for an Apple ID password or 2FA code.</p></div></div>
-    <div className="signing-hero"><div className="signing-symbol"><FileKey2 size={24} /></div><div><div className="eyebrow">CURRENT STATUS</div><h2>{snapshot?.signing.configured ? "Identity imported" : "No signing identity"}</h2><p>{snapshot?.signing.configured ? snapshot.signing.limitation : "Import an Apple Development certificate and a provisioning profile created for your device."}</p>{snapshot?.signing.provisioningExpiresAt && <p>Provisioning profile expires {formatDate(snapshot.signing.provisioningExpiresAt)}.</p>}</div><span className={`status-dot ${snapshot?.signing.configured ? "good" : "muted"}`} /></div>
+    <div className="signing-hero"><div className="signing-symbol"><FileKey2 size={24} /></div><div><div className="eyebrow">CURRENT STATUS</div><h2>{snapshot?.signing.configured ? "Identity imported" : "No signing identity"}</h2><p>{snapshot?.signing.configured ? snapshot.signing.limitation : "Import an Apple Development certificate and a provisioning profile created for your device."}</p><div className="signing-facts"><span><strong>Team</strong>{snapshot?.signing.teamId ?? "Not reported"}</span><span><strong>Certificate</strong>{snapshot?.signing.certificateExpiresAt ? expirySummary(snapshot.signing.certificateExpiresAt) : "Not reported"}</span><span><strong>Provisioning</strong>{snapshot?.signing.provisioningExpiresAt ? expirySummary(snapshot.signing.provisioningExpiresAt) : "Not reported"}</span></div></div><span className={`status-dot ${snapshot?.signing.configured ? "good" : "muted"}`} /></div>
+    <section className="form-card onboarding-card">
+      <div className="section-title compact"><div><div className="eyebrow">APPLE SIGNING SETUP</div><h2>Choose a supported setup path</h2></div></div>
+      <div className="onboarding-option"><span className="option-badge">A</span><div><strong>Apple Account / Personal Team</strong><p>Apple does not document a Windows Personal Team provisioning flow or API. Use Xcode on a Mac to create the development identity/profile, then import them below. The Companion never collects Apple ID passwords or 2FA codes.</p></div></div>
+      <div className="onboarding-option"><span className="option-badge">B</span><div><strong>Import existing signing files</strong><p>Works with a paid Developer Program team or a Personal Team profile created using Xcode, provided the P12 certificate, App ID, device UDID, and profile match. Apple publishes Team-scoped App Store Connect API endpoints for paid-team provisioning; this Companion does not yet manage API keys or create certificates/profiles.</p></div></div>
+    </section>
     <div className="form-card">
       <div className="section-title compact"><div><div className="eyebrow">LOCAL FILES</div><h2>Import certificate & profile</h2></div></div>
       <FileChoice label="Apple Development identity" detail="Encrypted .p12 or .pfx" value={p12Path} action={chooseP12} />
@@ -300,8 +414,49 @@ function Signing({ snapshot, onChanged, onNotice }: { snapshot: Snapshot | null;
       <div className="form-actions"><button className="secondary-button" onClick={() => { setPassword(""); setP12Path(""); setProfilePath(""); }}>Clear fields</button><button className="primary-button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Save signing identity"}<ChevronRight size={15} /></button></div>
       {snapshot?.signing.configured && <button className="danger-text-button remove-identity" onClick={() => void remove()}>Remove saved identity</button>}
     </div>
-    <div className="limitations-card"><div className="limitations-title"><AlertTriangle size={16} /><strong>Account and device limits</strong></div><ul><li>Free Apple Personal Team profiles expire after 7 days and Apple’s documented workflow uses Xcode on macOS to provision them. This Windows flow does not automate free-account provisioning.</li><li>A paid Apple Developer membership can manage devices, certificates, and development profiles through Apple’s developer portal. Membership is optional; this app doesn’t purchase it.</li><li>Developer Mode must be enabled by the iPhone owner. A provisioning profile must include the connected UDID and matching bundle ID.</li><li>Imported profiles may expire or be revoked. The companion reports profile expiry when it can parse the file; it never promises permanent signing.</li></ul></div>
+    <section className="form-card diagnostics-card">
+      <div className="section-title compact"><div><div className="eyebrow">PHYSICAL DEVICE READINESS</div><h2>Device diagnostics</h2></div><button className="secondary-button small" onClick={onDiagnostics} disabled={diagnosing}><RefreshCw size={13} />{diagnosing ? "Checking…" : "Run Diagnostics"}</button></div>
+      <p className="section-description">Checks the Windows Apple service, device bridge, USB/trust state, signing material, provisioning, and DreyzeStore pairing. Unknown means the connected device service does not expose that fact.</p>
+      {readiness ? <>
+        <div className="readiness-grid">
+          <ReadinessRow title="Apple Mobile Device Service" check={readiness.appleMobileDeviceService} />
+          <ReadinessRow title="USB connection" check={readiness.usbConnection} />
+          <ReadinessRow title="Trust" check={readiness.trust} />
+          <ReadinessRow title="Developer Mode" check={readiness.developerMode} />
+          <ReadinessRow title="pymobiledevice3" check={readiness.pymobiledevice3} />
+          <ReadinessRow title="Signing identity" check={readiness.signingIdentity} />
+          <ReadinessRow title="Provisioning" check={readiness.provisioning} />
+          <ReadinessRow title="DreyzeStore pairing" check={readiness.dreyzePairing} />
+        </div>
+        <div className="diagnostic-timestamp">Last checked {formatDate(readiness.runAt)}</div>
+      </> : <div className="diagnostic-empty">Run diagnostics to check the current Windows PC and paired iPhone.</div>}
+    </section>
+    <section className="form-card test-install-card">
+      <div className="section-title compact"><div><div className="eyebrow">REAL DEVICE TEST</div><h2>{testInstallation ? "Test app confirmed" : "Test Installation"}</h2></div>{testInstallation && <StatusPill ok label="Inventory confirmed" />}</div>
+      {testInstallation ? <>
+        <p className="section-description"><strong>{testInstallation.bundleIdentifier}</strong> · {testInstallation.version} ({testInstallation.build}) · Installed {formatDate(testInstallation.installedAt)}</p>
+        <div className="signing-facts"><span><strong>Team</strong>{testInstallation.teamIdentifier ?? "Not reported"}</span><span><strong>Certificate</strong>{testInstallation.certificateExpiresAt ? expirySummary(testInstallation.certificateExpiresAt) : "Not reported"}</span><span><strong>Profile</strong>{testInstallation.provisioningExpiresAt ? expirySummary(testInstallation.provisioningExpiresAt) : "Not reported"}</span></div>
+        <div className="form-actions"><button className="danger-text-button" onClick={onRemoveTestInstall}>Uninstall test app</button></div>
+      </> : <>
+        <p className="section-description">Choose a test IPA you authored or are authorized to install. The Companion accepts only <code>org.dreyzestore.test.*</code> bundle IDs, recalculates its SHA-256, validates the archive, signs locally, installs over USB, then checks bundle ID/version/build in device inventory. No IPA is included in the repository.</p>
+        <div className="form-actions"><button className="primary-button" onClick={onTestInstall} disabled={testingInstall}>{testingInstall ? "Working…" : "Choose Test IPA"}<ChevronRight size={15} /></button></div>
+      </>}
+    </section>
+    <div className="limitations-card"><div className="limitations-title"><AlertTriangle size={16} /><strong>Signing limits</strong></div><ul><li>Apple says Personal Team App IDs, devices, installed-app slots, and development profiles are limited; profiles are valid for 7 days and require reprovisioning. The Companion never promises permanent signing.</li><li>Developer Mode must be enabled by the iPhone owner. Current Windows discovery cannot report it reliably, so diagnostics may show Unknown.</li><li>Only provisioning-profile authorization for the bundle ID, connected device, and matching certificate is checked here. Entitlement rewriting and capability approval are not performed; Apple/device signing checks remain authoritative.</li><li>Expiry is shown from the imported certificate and provisioning profile. Refresh still requires a current valid profile and reinstallation; there is no unattended Apple Account session.</li></ul></div>
   </div>;
+}
+
+function ReadinessRow({ title, check }: { title: string; check: ReadinessCheck }) {
+  const label = check.status === "pass" ? "PASS" : check.status === "fail" ? "FAIL" : "UNKNOWN";
+  return <div className="readiness-row"><div className={`readiness-state ${check.status}`} aria-label={label}>{label}</div><div><strong>{title}</strong><span>{check.details}</span></div></div>;
+}
+
+function expirySummary(value: string) {
+  const remaining = new Date(value).getTime() - Date.now();
+  if (!Number.isFinite(remaining)) return "Not reported";
+  if (remaining <= 0) return `Expired ${formatDate(value)}`;
+  const days = Math.ceil(remaining / 86_400_000);
+  return `Expires in ${days} ${days === 1 ? "day" : "days"} · ${formatDate(value)}`;
 }
 
 function StatusPill({ ok, label, neutral = false }: { ok: boolean; label: string; neutral?: boolean }) {

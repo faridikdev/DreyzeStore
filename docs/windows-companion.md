@@ -41,6 +41,18 @@ The local API uses `/api/v1/device`, `/signing`, `/install`, `/install/{id}`, `/
 
 The service does not currently expose Developer Mode through its device short-info response. Companion labels this status unknown and requires the owner to enable it manually. If Developer Mode is off, device install fails; DreyzeStore never changes this setting automatically.
 
+## Apple signing onboarding and readiness
+
+The Apple Signing screen intentionally has no Apple Account or 2FA form. Apple documents Personal Team setup through Xcode on a Mac, not a Windows Personal Team provisioning API. AltStore/Sideloadly/SideStore have their own sign-in/Anisette implementations; DreyzeStore does not depend on those undocumented Apple authentication flows.
+
+The supported setup is to import the user's own Apple Development `.p12` and matching `.mobileprovision`. P12/profile data is protected locally, and Windows CryptoAPI reads the P12 with `PKCS12_NO_PERSIST_KEY` so the temporary inspection does not persist its private key. The P12 certificate must be present in the profile's `DeveloperCertificates`; the certificate and profile expiry, team, profile app identifier, and target device are checked. Each app bundle ID is checked again before signing. Companion does not rewrite identifiers or entitlements.
+
+**Run Diagnostics** checks Apple Mobile Device Service state, the real `pymobiledevice3 usbmux list --usb` operation, a visible/trusted USB device, the reported Developer Mode state, P12/profile status, the profile's match for the connected phone, and whether a DreyzeStore pairing token is configured. USB and Trust show **Unknown** if no trusted device is returned because the current USBMux discovery cannot distinguish a disconnected phone from one awaiting the user's Trust action. Developer Mode remains **Unknown** when the provider does not expose it. Pairing check means a token is configured; it does not prove the phone is currently reachable.
+
+**Test Installation** is a real local hardware test action, not a success mock. It accepts only a user-selected IPA with bundle ID prefix `org.dreyzestore.test.`, revalidates its archive and SHA-256, signs it using the imported files, installs through the same coordinator, and confirms exact bundle ID/version/build from device inventory. It never replaces a bundle already present outside its own test record. The dedicated uninstall action is restricted to that test record and clears it only after inventory confirms removal. Test package bytes are not copied to the repository or cloud. See [physical iPhone install test](physical-device-install-test.md).
+
+Apple Account login, 2FA, free Personal Team registration/profile creation, paid-team API-key onboarding, arbitrary entitlement remapping, and automatic/background refresh are not implemented. The paid App Store Connect API has documented provisioning endpoints, but a future local API-key flow must be designed separately. See [Apple signing research](apple-signing.md).
+
 After a confirmed install, Companion retains the original, digest-named IPA for local refresh and removes failed temporary uploads. On next start it clears interrupted staging/signing data and unreferenced originals. Refresh reinstalls the saved, same-version package. New-version update selection belongs to PHASE 7.
 
 ## Licensing

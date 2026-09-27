@@ -2,9 +2,9 @@
 
 [English](README.md) · **Русский**
 
-DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 6 добавляет публикацию релизов после review; PHASE 6.5 — прототип Windows Companion и локальный pipeline работы с устройством.**
+DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 6 добавляет публикацию релизов после review; PHASE 6.5 — Windows Companion; PHASE 6.6 — настройку signing-файлов, диагностику устройства и ограниченный тестовый install flow.**
 
-iOS-клиент скачивает опубликованные пакеты и проверяет SHA-256 и структуру IPA. На обычной iOS он может спариться с Windows Companion через локальное TLS-соединение с закреплённым сертификатом. Windows повторно проверяет пакет, подписывает локально импортованной Apple Development identity, устанавливает через доверенный USB-сервис устройства и подтверждает точные bundle ID/version/build по inventory. Только после этого интерфейс сообщает **Installed**. Этот прототип пока не проверен с настоящим iPhone и signing identity. Передача в TrollStore остаётся отдельным необязательным путём для совместимых сред и сообщает **Handed Off**, а не **Installed**.
+iOS-клиент скачивает опубликованные пакеты и проверяет SHA-256 и структуру IPA. На обычной iOS он может спариться с Windows Companion через локальное TLS-соединение с закреплённым сертификатом. Windows повторно проверяет пакет, подписывает локально импортованной Apple Development identity, устанавливает через доверенный USB-сервис устройства и подтверждает точные bundle ID/version/build по inventory. Только после этого интерфейс сообщает **Installed**. Apple Account/2FA и автоматическое создание Personal Team профиля не реализованы: Apple документирует этот путь через Xcode на Mac. Локальный Test Installation принимает только собственные/разрешённые тестовые приложения с bundle ID `org.dreyzestore.test.*`. Установка на физическом iPhone пока **НЕ ПРОВЕРЕНА**. Передача в TrollStore остаётся отдельным необязательным путём для совместимых сред и сообщает **Handed Off**, а не **Installed**.
 
 ## Архитектура
 
@@ -16,7 +16,7 @@ iOS-клиент скачивает опубликованные пакеты и
 - `scripts/validate_ipa.py` — изолированный ограниченный валидатор IPA, запускаемый workflow GitHub Actions.
 - `.github/workflows/ci.yml` — проверки backend/admin, macOS-сборка iOS Simulator и Windows-тесты/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — проверка выбранной загрузки с аутентификацией OIDC.
 
-Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [ограничения Apple signing](docs/apple-signing.md), [план проверки на устройстве](docs/windows-companion-device-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
+Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [исследование Apple signing](docs/apple-signing.md), [физическая проверка iPhone](docs/physical-device-install-test.md), [TrollStore handoff](docs/physical-device-trollstore-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
 
 ## Требования
 
@@ -59,7 +59,7 @@ Debug-конфигурация использует `http://127.0.0.1:8787/api/v
 
 ## Windows Companion
 
-См. [настройку и границы signing](docs/windows-companion.md). Companion installer не подписан и предназначен для разработки; Apple credentials и device service в пакет не входят. Для локальной подписи нужны предоставленные пользователем Apple Development identity и provisioning profile, включающий целевой iPhone. Companion не автоматизирует Apple Account или Personal Team provisioning. Установка на физическом устройстве пока не проверена.
+См. [настройку и границы signing](docs/windows-companion.md). Companion installer не подписан и предназначен для разработки; Apple credentials и device service в пакет не входят. Для локальной подписи нужны предоставленные пользователем Apple Development identity и provisioning profile, включающий целевой iPhone. Companion не автоматизирует Apple Account или Personal Team provisioning. Запусти [план физической проверки iPhone](docs/physical-device-install-test.md); установка на реальном устройстве пока не проверена.
 
 ## Безопасность и права на релизы
 

@@ -37,7 +37,10 @@ The cloud catalog supplies metadata and published files only. The Apple account 
 - Local pair token: iOS Keychain, `AfterFirstUnlockThisDeviceOnly`; Windows Credential Manager stores its digest and paired client UUID. Forget on Windows revokes the host token; clear the stale iOS pairing in DreyzeStore Settings before pairing again.
 - Signing P12 and `.mobileprovision`: encrypted with DPAPI in Companion app data.
 - P12 password: Windows Credential Manager; short-lived zeroized Rust value; length-prefixed stdin to the local signer, never an argument or environment variable.
+- Certificate metadata inspection uses Windows CryptoAPI's non-persistent PFX store flag; it returns public certificate DER/expiry metadata only. It does not save an imported private key to the Windows certificate store.
+- Readiness diagnostics report only pass/fail/unknown and practical remediation details. No Apple password, 2FA code, session token, private key, or full UDID is included.
 - Clear signer input: written temporarily for zsign, then deleted by scope cleanup. An abrupt process termination can leave app-data files; startup cleanup deletes UUID-scoped signing workspaces.
+- The local Test Installation flow is available only from the signed desktop UI, accepts a user-selected IPA with the reserved `org.dreyzestore.test.*` bundle prefix, calculates its expected digest locally, invokes the existing validator/signer/coordinator, and stores a local record needed for constrained cleanup. It does not accept paths over the phone's HTTP API or upload the file. It is a test/import path and does not alter the normal iOS `VerifiedPackage` boundary.
 - Package originals: retained only after a real inventory-confirmed install to support local same-version refresh; named by SHA-256. Uninstall removes the saved original after device inventory confirms the app is gone.
 - Failed/partial transfers and signed outputs: deleted on failure or at next app startup.
 

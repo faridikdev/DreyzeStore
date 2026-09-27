@@ -55,6 +55,10 @@ struct PairedWindowsCompanion: Codable, Equatable, Sendable {
     var deviceProductVersion: String?
     var developerMode: Bool?
     var signingConfigured: Bool
+    var signingIdentity: String?
+    var teamIdentifier: String?
+    var signingMessage: String?
+    var certificateExpiresAt: Date?
     var provisioningExpiresAt: Date?
     var connectionError: String?
 }
@@ -196,6 +200,10 @@ private struct CompanionDevice: Decodable, Sendable {
 
 private struct CompanionSigningStatus: Decodable {
     let configured: Bool
+    let identityLabel: String?
+    let teamId: String?
+    let limitation: String?
+    let certificateExpiresAt: Date?
     let provisioningExpiresAt: Date?
 }
 
@@ -343,6 +351,10 @@ private struct WindowsCompanionService {
             deviceProductVersion: nil,
             developerMode: nil,
             signingConfigured: false,
+            signingIdentity: nil,
+            teamIdentifier: nil,
+            signingMessage: nil,
+            certificateExpiresAt: nil,
             provisioningExpiresAt: nil,
             connectionError: nil
         )
@@ -365,6 +377,10 @@ private struct WindowsCompanionService {
             deviceProductVersion: nil,
             developerMode: nil,
             signingConfigured: false,
+            signingIdentity: nil,
+            teamIdentifier: nil,
+            signingMessage: nil,
+            certificateExpiresAt: nil,
             provisioningExpiresAt: nil,
             connectionError: nil
         )
@@ -379,6 +395,10 @@ private struct WindowsCompanionService {
         updated.deviceName = device?.name
         updated.deviceProductVersion = device?.productVersion
         updated.developerMode = device?.developerMode
+        updated.signingIdentity = signing.identityLabel
+        updated.teamIdentifier = signing.teamId
+        updated.signingMessage = signing.limitation
+        updated.certificateExpiresAt = signing.certificateExpiresAt
         updated.provisioningExpiresAt = signing.provisioningExpiresAt
         updated.signingConfigured = signing.configured
             && (signing.provisioningExpiresAt.map { $0 > Date() } ?? true)

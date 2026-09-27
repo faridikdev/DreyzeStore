@@ -30,7 +30,23 @@ struct WindowsCompanionPairingView: View {
                     LabeledContent("iOS", value: pairedRecord.deviceProductVersion ?? "Unknown")
                     LabeledContent("Trust", value: pairedRecord.deviceUDID == nil ? "Connect and trust iPhone" : "Trusted")
                     LabeledContent("Developer Mode", value: developerModeLabel(pairedRecord.developerMode))
-                    LabeledContent("Signing", value: pairedRecord.signingConfigured ? "Configured" : "Needs setup")
+                    LabeledContent("Signing", value: pairedRecord.signingConfigured ? "Signing Ready" : "Setup Required")
+                    if pairedRecord.certificateExpiresAt != nil || pairedRecord.provisioningExpiresAt != nil {
+                        LabeledContent("Team", value: pairedRecord.teamIdentifier ?? "Not reported")
+                        LabeledContent("Identity", value: pairedRecord.signingIdentity ?? "Apple Development")
+                        LabeledContent("Certificate expires", value: expiryLabel(pairedRecord.certificateExpiresAt))
+                        LabeledContent("Provisioning expires", value: expiryLabel(pairedRecord.provisioningExpiresAt))
+                    }
+                    if !pairedRecord.signingConfigured {
+                        Text(pairedRecord.signingMessage ?? "Finish signing setup on your Windows PC. Import a current Apple Development certificate and a profile for this iPhone.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let warning = signingExpiryWarning(pairedRecord) {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.orange)
+                    }
                     Button {
                         Task { await refreshPairing() }
                     } label: {
@@ -199,5 +215,20 @@ struct WindowsCompanionPairingView: View {
         case false: "Off"
         case nil: "Not reported by device service"
         }
+    }
+
+    private func expiryLabel(_ date: Date?) -> String {
+        guard let date else { return "Not reported" }
+        let formatted = date.formatted(date: .abbreviated, time: .omitted)
+        if date <= Date() { return "Expired · \(formatted)" }
+        let days = max(0, Calendar.current.dateComponents([.day], from: Date(), to: date).day ?? 0)
+        return "In \(days) days · \(formatted)"
+    }
+
+    private func signingExpiryWarning(_ record: PairedWindowsCompanion) -> String? {
+        let dates = [record.certificateExpiresAt, record.provisioningExpiresAt].compactMap { $0 }
+        guard let nearest = dates.min() else { return nil }
+        if nearest <= Date() { return "Signing expired. Refresh is required; import a current certificate or provisioning profile on Windows." }
+        return nil
     }
 }
