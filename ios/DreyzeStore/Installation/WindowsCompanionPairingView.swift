@@ -24,7 +24,7 @@ struct WindowsCompanionPairingView: View {
             }
 
             if let pairedRecord {
-                Section("Paired Computer") {
+                Section {
                     LabeledContent("Computer", value: pairedRecord.endpoint.host ?? "Windows Companion")
                     LabeledContent("iPhone", value: pairedRecord.deviceName ?? "Not connected")
                     LabeledContent("iOS", value: pairedRecord.deviceProductVersion ?? "Unknown")
@@ -41,9 +41,11 @@ struct WindowsCompanionPairingView: View {
                         WindowsCompanionPairing.forget()
                         self.pairedRecord = nil
                     }
+                } header: {
+                    Text("Paired Computer")
                 }
             } else {
-                Section("Pair with Windows") {
+                Section {
                     Button {
                         requestCameraAndScan()
                     } label: {
@@ -74,18 +76,22 @@ struct WindowsCompanionPairingView: View {
                         }
                     }
                     .disabled(isPairing || endpoint.isEmpty || pairingCode.isEmpty || fingerprint.isEmpty)
+                } header: {
+                    Text("Pair with Windows")
                 } footer: {
                     Text("Pair only with a computer you control. The certificate fingerprint pins future connections to this Companion.")
                 }
             }
 
-            Section("Before Installing") {
+            Section {
                 Label("Connect iPhone by USB and tap Trust on the device.", systemImage: "cable.connector")
                 Label("Enable Developer Mode in Settings → Privacy & Security if required.", systemImage: "checkmark.shield")
                 Label("Import a matching Apple Development certificate and provisioning profile in Companion.", systemImage: "signature")
                 Text("Windows Companion can report installation success only after the connected iPhone lists the exact bundle ID, version, and build.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+            } header: {
+                Text("Before Installing")
             }
 
             if let errorMessage {

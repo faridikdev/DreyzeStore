@@ -242,7 +242,11 @@ struct CompanionInstallReceipt: Decodable {
         } else {
             let nested = try container.decode(CompanionInstallStateObject.self, forKey: .state)
             state = nested.state
-            detail = nested.detail ?? (try container.decodeIfPresent(CompanionInstallDetail.self, forKey: .detail))
+            if let nestedDetail = nested.detail {
+                detail = nestedDetail
+            } else {
+                detail = try container.decodeIfPresent(CompanionInstallDetail.self, forKey: .detail)
+            }
         }
     }
 }
