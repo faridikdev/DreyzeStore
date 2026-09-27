@@ -1,111 +1,77 @@
-# Installation architecture
+# Installation architecture and research
 
-**Status:** Phase 5. DreyzeStore has a verified-package boundary and one real system-share handoff backend. It does not install an IPA on ordinary sandboxed iOS and never labels an external handoff as an installation.
+**Status:** Phase 5.5. The iOS app has one usable real installation route on compatible devices: it hands a previously verified local IPA to TrollStore or TrollStore Lite through Apple's document Open In menu. The target app owns the installation flow; its confirmation prompt can be enabled or disabled in its own settings. DreyzeStore observes only the completed file handoff and records **Handed Off**, never **Installed**. The physical-device flow has not yet been tested.
 
-`VerifiedPackage` can only be created by `PackageValidator` after the local file's digest matches release metadata and its IPA structure and app metadata validate. Immediately before a backend receives it, DreyzeStore confirms the file and sidecar record belong to `PackageStorage`, recomputes SHA-256, and reinspects IPA metadata. No TrollStore or TrollStore Lite source has been downloaded or copied into this repository.
+`VerifiedPackage` is the only input accepted by `InstallationBackend`. Before handoff, `InstallationCoordinator` asks `PackageValidator` to verify the PackageStorage receipt, file location, SHA-256, archive structure, release metadata, bundle ID, version, build, and minimum OS again. No arbitrary URL or server-only release model can enter the handoff route. No TrollStore source or exploit code is copied into this repository.
 
-## What the iOS app can and cannot do
+## Findings from current upstream TrollStore
 
-The iOS client uses a background-compatible `URLSession` to download an IPA into a UUID-named app-managed temporary location, verify the published SHA-256, and inspect required ZIP/IPA metadata without extracting arbitrary archive paths. The verified file is retained in DreyzeStore's managed package directory. A normal sandboxed app cannot call a public Apple API to install arbitrary IPA files, replace system package-management services, or enumerate all third-party installed apps. Installation and installed-app discovery are conditional capabilities, not baseline features of an App Store-style SwiftUI view.
+Research was checked against upstream `opa334/TrollStore` commit [`88424f683b2a08f34a3f88985f790f97d84ce1df`](https://github.com/opa334/TrollStore/tree/88424f683b2a08f34a3f88985f790f97d84ce1df) on 2026-09-27.
 
-The download flow and installation flow use separate states:
+- TrollStore and TrollStore Lite both register the imported document type `com.apple.itunes.ipa` for `.ipa` files in `CFBundleDocumentTypes` ([TrollStore Info.plist](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/TrollStore/Resources/Info.plist), [Lite Info.plist](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/TrollStoreLite/Resources/Info.plist)).
+- Upstream `TSSceneDelegate` receives an imported file URL, starts security-scoped access, routes `.ipa`/`.tipa` to `TSInstallationController.presentInstallationAlertIfEnabledForFile`, and releases the access when TrollStore's operation callback finishes ([scene delegate](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/TrollStore/TSSceneDelegate.m)). The controller reads package metadata, shows the user an Install/Cancel prompt when enabled, and invokes TrollStore's install routine after the user selects Install ([installation controller](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/TrollStore/TSInstallationController.m)). This is a real target-side installation flow, not a DreyzeStore installation API.
+- Apple's public `UIDocumentInteractionController.presentOpenInMenu` presents compatible document handlers for the supplied URL/UTI. Apple provides `willBeginSendingToApplication` and `didEndSendingToApplication` callbacks; the latter identifies the receiving app, and neither reports what that app did after it received the file ([API overview](https://developer.apple.com/documentation/uikit/uidocumentinteractioncontroller), [delegate callback](https://developer.apple.com/documentation/uikit/uidocumentinteractioncontrollerdelegate/documentinteractioncontroller%28_%3Adidendsendingtoapplication%3A%29)). DreyzeStore uses this Open In menu with `com.apple.itunes.ipa`, then recognizes TrollStore's or TrollStore Lite's bundle ID in the callback when the OS returns it.
+- The `apple-magnifier://install?url=...` scheme is a remote-URL downloader in TrollStore, not a local verified-file import API. Upstream states that without TrollStore the system Magnifier app opens. DreyzeStore does not use that scheme to detect TrollStore or to bypass its local SHA-256-verified file.
+- An open upstream issue reported a file-picker/share failure in a restored TrollStore Lite environment in September 2026 ([issue #957](https://github.com/opa334/TrollStore/issues/957)). It is an environment-specific report rather than a published API restriction, but it reinforces the need for physical-device testing.
+- Upstream README support is limited to iOS 14.0 beta 2–16.6.1, the specific 16.7 RC build 20H18, and iOS 17.0. It excludes other 16.7.x builds and iOS 17.0.1+ ([README](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/README.md)). DreyzeStore does not extend or infer this compatibility list.
+
+The supported integration surface found here is **document import through Open In**. No TrollStore URL-scheme callback, public helper API, or entitlement-granting route exists for a normal sandboxed client to call an install routine directly. The receiving app owns the confirmation and install result.
+
+## DreyzeStore prototype
+
+`TrollStoreBackend` accepts only a `VerifiedPackage` and requests a document handoff. `TrollStoreDocumentImportSheet` gives the already revalidated app-managed IPA to `UIDocumentInteractionController`, declares `com.apple.itunes.ipa`, and displays Apple's Open In menu. It does not copy TrollStore internals or attempt private helper communication.
+
+The receiving app is selected at runtime. If TrollStore or TrollStore Lite is installed and registered for the IPA UTI, it can appear in the menu. The user selects it, TrollStore presents its own confirmation, and TrollStore installs only after that confirmation. The `didEndSendingToApplication` callback lets DreyzeStore record the receiving bundle ID; DreyzeStore records **Handed Off** and cannot observe the subsequent prompt, cancellation, or installation result. A selected application in the callback is never interpreted as installed.
+
+The system Open In API is considered an available *handoff action* in this build, not proof TrollStore is installed. If the menu has no compatible receiver, DreyzeStore returns a clear error. The fallback External App Handoff remains available as a separate system share-sheet action.
+
+## TrollStore Lite and jailbreak build feasibility
+
+TrollStore Lite is a distinct upstream application intended for jailbroken iOS environments. It can receive `.ipa` files through the same registered UTI and document import flow. Its actual installation work is performed inside Lite, not inside DreyzeStore.
+
+The upstream Lite Makefile builds an arm64 iOS app from the TrollStore and shared Objective-C sources using Theos, links private `Preferences`, `MobileIcons`, and `MobileContainerManager` frameworks, and sets `TROLLSTORE_LITE`. The upstream root helper has a separate `trollstorehelper_lite` build with `TROLLSTORE_LITE` and `DISABLE_SIGNING`; Lite expects a jailbreak-provided `ldid` at its jailbreak-root path. Lite's app/helper entitlements include unsandboxed/platform-application access and private MobileInstallation, container manager, Launch Services, SpringBoard, and uninstall privileges ([Lite app entitlements](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/TrollStoreLite/entitlements.plist), [root helper Makefile](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/RootHelper/Makefile), [root helper entitlements](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/RootHelper/entitlements.plist)). These privileges are not available to a normal signed/sandboxed iOS app.
+
+A future `DreyzeStore-Jailbreak` target is technically possible as a separate jailbreak-specific product using shared SwiftUI/store and verification modules plus a separately packaged, environment-specific helper. It would require an explicitly supported jailbreak/toolchain matrix, Theos packaging, rootful/rootless variants, privileged entitlements supplied by the jailbreak environment, and device tests on each supported bootstrap. It must not compile those private APIs or helper into the normal target. It is not required for this prototype: the public document-import path can hand off to an already installed Lite app without DreyzeStore taking its privileges. No jailbreak target or privileged helper is included now.
+
+## Developer signing path
+
+No fake signer is implemented. A realistic local flow is:
 
 ```text
-GET -> Downloading -> Verifying -> Inspecting -> Package Ready
-Package Ready -> Preparing Installation -> Installing -> Handed Off
-                                                        (system share activity completed)
+VerifiedPackage
+    -> local macOS helper revalidates the source receipt and digest
+    -> signs only with the user's locally managed certificate/private key and provisioning profile
+    -> emits a distinct locally signed IPA and a new local digest/receipt
+    -> installs to a registered, paired iPhone using Xcode or Apple Configurator 2
 ```
 
-`Package Ready` is not `Installed`. The system share sheet accepts the verified local IPA and returns whether a selected share activity completed. DreyzeStore records that as `Handed Off`; the receiving app's actual installation is outside its control and cannot be confirmed from this callback. Only a future backend with an authoritative result can emit `Installed`.
+Apple's supported registered-device workflow requires an App ID, a signing certificate and private key, a registered device, and a provisioning profile. Apple documents installing the exported IPA with Xcode or Apple Configurator 2, and requires Developer Mode on each device running an IPA-based app ([Apple Xcode guide](https://developer.apple.com/documentation/xcode/distributing-your-app-to-registered-devices), [development profile requirements](https://developer.apple.com/help/account/provisioning-profiles/create-a-development-provisioning-profile)). Signing material should remain in the user's macOS Keychain; Apple describes private keys as part of the local signing identity ([Keychain Services](https://developer.apple.com/documentation/security/keychain-services)).
 
-## Backend contract
+This path is scoped to registered development/test devices, not a universal consumer IPA store. Entitlements, App IDs, extensions, embedded frameworks, and provisioning profiles can prevent a third-party IPA from being re-signed or launched. A helper must preserve the original verified receipt and produce a separate signed-artifact receipt; the source SHA-256 must never be presented as the digest of the modified package. Apple credentials are never sent to DreyzeStore servers. Windows cannot run Xcode or Apple Configurator 2; a Windows UI could at most orchestrate an explicitly paired Mac helper. No signing or device-install code is present in this phase.
 
-The device capability service combines runtime OS availability, the app's actual entitlements, explicit user configuration where required, and a backend-specific availability result. It does not infer private/jailbreak state from private APIs or from a generic `canOpenURL` result.
+## Capability matrix
 
-```swift
-protocol InstallationBackend: Sendable {
-    var identifier: String { get }
-    var displayName: String { get }
-    var availability: BackendAvailability { get }
-    var capabilities: InstallationCapabilities { get }
+“Can confirm?” distinguishes what the target tool can do from what DreyzeStore can observe. Inventory and uninstall columns mean **available to DreyzeStore**, not merely inside another manager's own UI.
 
-    func install(package: VerifiedPackage) async -> InstallationDirective
-    func uninstall(bundleIdentifier: String) async -> UninstallationResult
-    func queryInstalledState(bundleIdentifier: String) async -> InstalledState
-}
+| Environment | Installation mechanism | Needs Apple developer signing? | Needs jailbreak? | Can install? | Target can confirm? | DreyzeStore can confirm? | Inventory to DreyzeStore? | Uninstall from DreyzeStore? |
+|---|---|---:|---:|---|---|---|---|---|
+| Standard sandboxed iOS | Public Open In/share handoff only | Depends on receiving app; no install capability in DreyzeStore | No | No, only hand off | Receiving app controls its own result | No | No | No |
+| TrollStore-compatible iOS with TrollStore installed | Open In sends the verified IPA to TrollStore; TrollStore's own prompt/helper installs it | No | No | Yes, after user confirms in TrollStore | Yes, inside TrollStore | No; DreyzeStore receives only the document-send callback | No | No; use TrollStore's own manager |
+| Jailbroken iOS with TrollStore Lite installed | Open In sends the IPA to Lite; Lite uses its jailbreak-provided privileged helper | No Apple signing; Lite relies on its jailbreak environment and `ldid` | Yes | Yes, after user confirms in Lite | Yes, inside Lite | No; DreyzeStore receives only the document-send callback | No | No; use Lite's own manager |
+| Developer signing environment | Future local signer then Xcode/Apple Configurator on a paired Mac | Yes: certificate, private key, App ID, registered device/profile | No | Yes for supported registered test devices, once implemented | Xcode/Configurator reports its own operation | No in this phase | No | No in this phase |
+| External handoff only | iOS share sheet to an app chosen by the user | Depends on recipient; no signer in DreyzeStore | No | Not by DreyzeStore | Recipient may show its own result | Only file/activity handoff, not install | No | No |
 
-enum BackendAvailability: Sendable {
-    case available
-    case unavailable(reason: String)
-    case requiresConfiguration(reason: String)
-    case unsupported(reason: String)
-}
-```
+TrollStore and Lite can install in their own processes after user confirmation. **DreyzeStore currently does not have an authoritative installed result, inventory, or uninstall capability on any row.**
 
-`InstallationCoordinator` is the only UI-facing route into a backend. It serializes state transitions, checks availability and capabilities, repeats package validation, and reports `installed`, `handedOff`, `cancelled`, `failed`, or `unsupported`. A `handoffRequested` directive is not success: the coordinator waits for the system activity controller's completion callback before recording `Handed Off`. Backend selection shows only `.available` methods. The settings screen also explains methods that are unavailable, unsupported, or need local configuration.
+## Installation security boundary
 
-The protocol accepts only `VerifiedPackage`; no route accepts a URL or server-only release metadata. `PackageValidator.revalidateForInstallation` requires a matching app-managed sidecar and path and recomputes digest, size, archive structure, bundle ID, version/build, and minimum OS. The downloaded file stays inside app-managed storage. The coordinator stops before invoking any backend if those checks fail.
+- The only install/handoff input is `VerifiedPackage`, constructed after Phase 4 checksum and archive checks.
+- `InstallationCoordinator` revalidates the package's PackageStorage receipt, managed path, SHA-256, archive structure, and IPA metadata immediately before calling the selected backend.
+- TrollStore Open In receives that verified managed file. If the file changes or leaves PackageStorage, the coordinator stops before presenting any handoff UI.
+- The receiving bundle ID is retained only as a handoff destination. It is not proof of package acceptance or installation.
+- There is no “Install Anyway” checksum bypass, no DreyzeStore private framework call, and no exploit code.
+- A matching checksum proves only that downloaded bytes match the repository's published digest. It does not prove the app is benign, its publisher is trustworthy, or that iOS will accept its signature.
 
-## Upstream TrollStore findings
+## Upstream license review
 
-The official [opa334/TrollStore README](https://github.com/opa334/TrollStore/blob/main/README.md) describes TrollStore as a permanently signing jailed app relying on an AMFI/CoreTrust signature-verification bug. Its published support list is iOS 14.0 beta 2 through 16.6.1, the specific 16.7 RC build 20H18, and 17.0. The upstream README explicitly excludes 16.7.x other than that RC and 17.0.1 or later. DreyzeStore will not extend that list or promise permanent signing on other versions.
-
-Upstream documents the URL handoff `apple-magnifier://install?url=<URL_to_IPA>`. It replaces the system `apple-magnifier` scheme; upstream says devices without TrollStore open Magnifier instead. This makes the scheme unsuitable as a reliable presence probe. Upstream documents a handoff, not a documented caller-visible installation result callback, so DreyzeStore can report only **Handed off** unless a future upstream-supported API provides confirmation.
-
-TrollStore Lite is not a separate public SDK. Its [upstream build target](https://github.com/opa334/TrollStore/blob/main/TrollStoreLite/Makefile) compiles the same `TrollStore/*.m` and `Shared/*.m` sources with `TROLLSTORE_LITE`, links private frameworks, and builds a privileged helper. The [upstream helper](https://github.com/opa334/TrollStore/blob/main/RootHelper/main.m) assumes `ldid` exists at a jailbreak-root path for Lite. It is an environment-specific TrollStore variant, not an API that an ordinary store app can embed or call on a stock device.
-
-No TrollStore or TrollStore Lite source is copied, embedded, or represented as DreyzeStore code. The upstream repository is MIT-licensed overall, with `RootHelper/uicache.m` separately under BSD-4-Clause; neither code nor binaries from those components are included. DreyzeStore's TrollStore entries are disabled backend descriptors, not an exploit or installer implementation.
-
-## Backend matrix
-
-| Backend | Environment | Install / handoff | Confirmation | Uninstall | Inventory |
-|---|---|---|---|---|---|
-| External App Handoff | Sandboxed iOS with the system share sheet | Shares only a revalidated, app-managed IPA URL | Reports `Handed Off` only when the selected activity completes; does not confirm installation | No | No |
-| TrollStore | Compatible upstream-supported OS and TrollStore installed; not reliably detectable from this sandbox | Disabled. Upstream documents a URL handoff, but the local IPA is private to DreyzeStore's sandbox and is not shared with TrollStore | Not available; opening the scheme is not proof of TrollStore presence or install | No supported client API | No supported client API |
-| TrollStore Lite | Jailbroken environment with the upstream privileged helper and private framework assumptions | Unsupported. DreyzeStore does not package or invoke the helper | None | None | None |
-| Developer Signing | Local, user-configured signer and supported device installation workflow | Requires configuration. This phase does not sign packages or invoke a signer | No confirmation until a future supported backend provides it | None | None |
-| Apple MarketplaceKit | Apple's approved marketplace program, entitlement, region, device, and notarized package requirements | Not implemented; the entitlement and operator approvals are not configured | Not implemented | Not implemented | Not implemented |
-| Enterprise / MDM | Organization-managed devices and authorized distribution setup | Not implemented; not a generic consumer IPA API | Not implemented | Not implemented | Not implemented |
-
-Only **External App Handoff** is currently shown as an available method. It shares the verified local package through Apple's `UIActivityViewController`; no external installer is detected or assumed. Apple documents the completion handler as the result of the selected activity or sheet dismissal, not the receiving app's install state ([UIActivityViewController](https://developer.apple.com/documentation/uikit/uiactivityviewcontroller), [completion handler](https://developer.apple.com/documentation/uikit/uiactivityviewcontroller/completionwithitemshandler-swift.typealias)).
-
-Apple's official [alternative marketplace overview](https://developer.apple.com/support/alternative-app-marketplace-in-the-eu/) states that marketplace capabilities are region- and OS-limited and that operating a marketplace requires Apple's authorization. Its current EU criteria include two years of Apple Developer Program standing and more than one million first annual installs worldwide in the prior calendar year. The [MarketplaceKit documentation](https://developer.apple.com/documentation/marketplacekit/creating-an-alternative-app-marketplace) describes the required entitlement, Apple Developer Program relationship, website, server, and notarized app distribution package. This path is a possible future backend only if DreyzeStore's operator qualifies and receives Apple's authorization; it is not a free generic IPA-install API.
-
-## Capability detection
-
-`DeviceCapabilityService` reports configured backend states and the public OS version only:
-
-- OS version and public API availability.
-- Whether a method in this build has an implemented, available public route.
-- Whether a method requires explicit local configuration.
-- Backend-specific support state and its user-facing reason.
-
-It does not probe the ambiguous TrollStore URL scheme. It does not read a complete app inventory through undocumented LaunchServices/private APIs. TrollStore remains unsupported by this DreyzeStore build even on an upstream-compatible OS because this app cannot pass its managed local file through the documented URL flow.
-
-An external URL handler's presence is not proof of the handler's identity or of a successful install. DreyzeStore does not use `canOpenURL` to infer TrollStore presence.
-
-Structural validation also does not prove that iOS will accept an IPA's code signature or provisioning profile. The selected, authorized installation backend and OS make that decision. DreyzeStore reports signature/install failures from that backend and does not claim the archive is installable solely because its metadata parsed.
-
-## Download and validation boundary
-
-1. Request a published release and expected byte size/SHA-256 from the selected repository.
-2. Download with a cancellable background-compatible `URLSessionDownloadTask` to a UUID-named app-managed temporary file. The OS owns background scheduling; a manual retry starts a fresh transfer.
-3. Check available storage, the 1 GiB hard ceiling, and exact actual byte count. Calculate SHA-256 and compare it to the published value. On mismatch, delete the temporary file and stop.
-4. Preflight the ZIP end record and bound central-directory size before opening it, then read the directory and the single `Payload/<AppName>.app/Info.plist`; no archive path is extracted. Validate bundle ID, version/build, minimum OS, and executable entry.
-5. Reject absolute/traversal paths, paths deeper than 64 segments, duplicate normalized paths, special entries, escaping symlinks, entry counts above 100,000, expanded size above 8 GiB, an individual entry above 2 GiB, a compression ratio above 1,000, and Info.plist above 8 MiB.
-6. Create a validation receipt and immutable `VerifiedPackage` only after checksum, archive, and release metadata all agree. Clean up on cancellation, mismatch, failure, or explicit deletion.
-7. `VerifiedPackage` is the installation boundary. Before handoff, Phase 5 confirms the receipt belongs to `PackageStorage`, then repeats the checksum and metadata validation. Only that receipt can reach the backend protocol.
-
-ZIPFoundation 0.9.20 is pinned for central-directory reading and selective entry streaming. The app uses its archive APIs without extracting untrusted package paths and applies explicit limits in `PackageValidator`; ZIP64 sentinel records are currently rejected during preflight. The generated tests exercise malformed archives, traversal, absolute paths, escaping symlinks, compression ratios, entry counts, central-directory size, and metadata mismatches.
-
-## Installed apps and updates
-
-An unprivileged iOS client cannot promise an OS-wide installed-app scan. The Library keeps `Downloaded`, `Handed Off`, `Installed`, and `Updates` separate. Only verified files appear in `Downloaded`; a completed system share activity is recorded in `Handed Off` (up to 100 local history records); `Installed` remains empty until a backend can authoritatively report inventory. Handoff history is not used as installed-app or update input.
-
-`GET /api/v1/updates` provides latest releases; it is not proof of local installation. Updates and uninstall remain unavailable while no production backend provides installed-app inventory and authoritative operation results. No success message is shown just because an external activity ran.
-
-## License and upstream research
-
-Research used the current upstream [TrollStore README](https://github.com/opa334/TrollStore/blob/main/README.md), [TrollStore Lite Makefile](https://github.com/opa334/TrollStore/blob/main/TrollStoreLite/Makefile), [upstream root helper](https://github.com/opa334/TrollStore/blob/main/RootHelper/main.m), [installation controller](https://github.com/opa334/TrollStore/blob/main/TrollStore/TSInstallationController.m), and [upstream license](https://github.com/opa334/TrollStore/blob/main/LICENSE), reviewed on 2026-09-27. The README says supported versions are 14.0 beta 2–16.6.1, 16.7 RC build 20H18, and 17.0; it says 16.7.x other than that RC and 17.0.1+ are not supported. It documents `apple-magnifier://install?url=<URL_to_IPA>` and warns that without TrollStore the scheme opens Magnifier. Its installation controller handles file paths inside its own app and a separate remote-download path; DreyzeStore's verified IPA is in its private sandbox, so it cannot be passed by merely supplying a path. DreyzeStore neither copies upstream code nor probes the ambiguous scheme. TrollStore Lite's target uses private frameworks and a separately built privileged helper; this client does not include it.
-
-The upstream project is MIT-licensed overall and marks `RootHelper/uicache.m` BSD-4-Clause. DreyzeStore only documents the interface and does not redistribute any upstream implementation, so no upstream notices or source are embedded in the app. If a later phase copies or links upstream code, review that exact file's notice and license first.
+No upstream TrollStore code or binary is included. The upstream repository license identifies the project as MIT except `RootHelper/uicache.m`, which has a separate BSD-4-Clause notice ([license](https://github.com/opa334/TrollStore/blob/88424f683b2a08f34a3f88985f790f97d84ce1df/LICENSE)). If a future phase copies or redistributes any upstream component, review that exact file and preserve its copyright and license notices.

@@ -1,6 +1,6 @@
 # DreyzeStore architecture
 
-**Status:** Phase 5 installation boundary complete. The native client consumes the Phase 2 public catalog API, supports browse/search/details, bounded metadata and image caches, cached offline browsing, verified IPA downloads, and a system-share handoff that is never presented as a confirmed installation. TrollStore/private-helper install backends, admin authentication, and cloud deployment remain unavailable or future work. No cloud resources have been created.
+**Status:** Phase 5.5 installation research/prototype complete. The native client consumes the Phase 2 public catalog API, supports browse/search/details, bounded metadata and image caches, cached offline browsing, verified IPA downloads, and an Open In document handoff that can route a verified IPA to installed TrollStore/TrollStore Lite. The receiver owns the install flow and its optional confirmation prompt; DreyzeStore records only `Handed Off`. Direct privileged helper integration, developer signing, admin authentication, physical-device verification, and cloud deployment remain future work. No cloud resources have been created.
 
 ## Goals and platform boundary
 
@@ -24,7 +24,7 @@ The admin app is a static SPA because it has no public pages that need server-si
 
 ## System shape
 
-This is the target system shape. In Phase 3, the native client reads the public catalog API and caches metadata/images. Admin auth, package transfer/validation, installation, and production storage are later work.
+This is the target system shape. Phases 3–5.5 now provide the native catalog client, package download/verification, and a verified document handoff. Admin auth, package upload/publication, broader signing, physical-device verification, and production storage remain later work.
 
 ```mermaid
 flowchart LR
@@ -186,7 +186,7 @@ The DreyzeStore source license is MIT. This license applies to DreyzeStore code,
 | Component | Upstream license / decision |
 |---|---|
 | TrollStore upstream | Its repository identifies most files as MIT and `RootHelper/uicache.m` as BSD-4-Clause. No TrollStore code is copied or linked. Preserve both notices and the CoolStar advertising acknowledgment if a future reviewed integration ever vendors that file. |
-| TrollStore Lite | It is a build target in `opa334/TrollStore`, not a separately documented DreyzeStore SDK. It uses the shared TrollStore source with `TROLLSTORE_LITE`; it is not integrated. |
+| TrollStore Lite | It is not a DreyzeStore SDK. Its public IPA document handler can receive packages through the same Open In handoff; DreyzeStore does not call Lite's privileged helper or copy its source. |
 | Hono | MIT; direct API dependency in Phase 1. |
 | React and Vite | MIT; direct admin dependencies in Phase 1. |
 | Wrangler and `@cloudflare/workers-types` | MIT OR Apache-2.0; used for local Worker tooling and types. |
@@ -199,4 +199,6 @@ Upstream references: [TrollStore license](https://github.com/opa334/TrollStore/b
 
 ## Phase gates
 
-Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation. Phase 2 added the public read-only API, D1 search/index constraints, repository generation, and fictional local-only metadata. Phase 3 connected the iOS catalog UI, tests decoding/state, and added metadata/image caching. Admin management, package validation/download, installation, and production deployment remain later explicit phase gates. No production DNS, Cloudflare resources, or secrets have been created.
+Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation. Phase 2 added the public read-only API, D1 search/index constraints, repository generation, and fictional local-only metadata. Phase 3 connected the iOS catalog UI and metadata/image caching. Phase 4 added real IPA download and package verification; Phase 5 added the VerifiedPackage-only backend boundary; Phase 5.5 added TrollStore/TrollStore Lite document import handoff. Admin management/upload, direct jailbreak helper integration, local developer signing, device verification, and production deployment remain later explicit phase gates. No production DNS, Cloudflare resources, or secrets have been created.
+
+See [ADR 0001](adr/0001-platform-and-installation-boundaries.md) for the original platform boundary and [ADR 0002](adr/0002-trollstore-document-import.md) for the supported import route discovered in Phase 5.5.
