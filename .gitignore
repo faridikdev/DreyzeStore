@@ -6,6 +6,12 @@ __pycache__/
 *.py[cod]
 dist/
 **/dist/
+.build/
+**/target/
+**/*.tsbuildinfo
+target/
+**/src-tauri/binaries/
+**/src-tauri/gen/schemas/
 coverage/
 **/coverage/
 .turbo/
@@ -40,6 +46,20 @@ xcuserdata/
 *.xcresult/
 *.dSYM/
 *.app/
+*.msi
+*.exe
+*.cer
+*.key
+*.pem
+*.mobileconfig
+*.p12
+*.pfx
+*.p7b
+*.p7c
+*.p7m
+*.p7s
+*.crt
+*.provisionprofile
 *.IPA
 *.TIPA
 

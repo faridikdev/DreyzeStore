@@ -1,0 +1,24 @@
+DreyzeStore Companion includes or builds with the following third-party components:
+
+zsign
+Copyright (c) 2026 zhlynn. Licensed under the MIT License. The Windows signer is
+built from upstream revision 614caa8d1ca949e260e5746144aa52d27a4b08d6. The local
+build patch adds length-prefixed password input on stdin and makes a failed
+post-sign executable check fail the signing command. Source and patch script:
+https://github.com/zhlynn/zsign/tree/614caa8d1ca949e260e5746144aa52d27a4b08d6
+See zsign-MIT.txt.
+
+OpenSSL
+The zsign Windows project uses OpenSSL 3.4.0 libraries. Copyright OpenSSL
+Project Authors. Licensed under Apache License 2.0. See Apache-2.0.txt.
+
+zlib
+The zsign Windows project includes zlib 1.3.1. Copyright (C) 1995-2024 Jean-loup
+Gailly and Mark Adler. The zlib license notice is reproduced in the DreyzeStore
+Companion documentation.
+
+pymobiledevice3
+The device service is an optional user-installed dependency and is not bundled
+or modified by DreyzeStore. Upstream is licensed under GNU GPL v3.0. Users install
+it separately along with the classic iTunes Apple Mobile Device Service.
+https://github.com/doronz88/pymobiledevice3

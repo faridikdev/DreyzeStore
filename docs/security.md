@@ -1,6 +1,6 @@
 # Security architecture and threat model
 
-**Scope:** Phase 6 Admin authentication, release intake/validation/publishing, public catalog delivery, and the already-implemented iOS download/package-verification boundary. This is an engineering baseline, not a malware scan, legal opinion, or independent security certification.
+**Scope:** Phase 6 Admin authentication and release publishing, public catalog delivery, the iOS package-verification boundary, and the Phase 6.5 local Windows Companion trust boundary. This is an engineering baseline, not a malware scan, legal opinion, or independent security certification.
 
 ## Assets and trust boundaries
 
@@ -15,6 +15,8 @@
 | Temporary client package | iOS app sandbox | Managed UUID path; SHA-256 then bounded IPA inspection; installation APIs only accept `VerifiedPackage` |
 
 Threats considered include password guessing, session theft, CSRF, role escalation, fake/replayed validator callbacks, staging URL disclosure, archive traversal/zip bombs, invalid or malicious images, broken object isolation, metadata mismatch, unauthorized distribution, race conditions during publish, and accidental leakage of internal keys or audit data.
+
+The separate Windows Companion threat model is available in [DreyzeStore-threat-model.md](../DreyzeStore-threat-model.md); Windows local pairing, device, signing, and transfer controls are summarized in [windows-companion-security.md](windows-companion-security.md).
 
 ## Admin authentication
 
@@ -45,8 +47,18 @@ Threats considered include password guessing, session theft, CSRF, role escalati
 ## Client and distribution trust
 
 - The client accepts only HTTPS package URLs, checks the exact byte limit, SHA-256, ZIP structure, bundle ID/version/build/minimum OS and executable before `VerifiedPackage` creation. A digest match confirms integrity relative to the API/repository, not safety or publisher identity.
-- Installation handoff repeats checksum and metadata checks immediately before export. iOS uses the system document import route, and the result is `Handed Off`, not `Installed`, unless a future supported backend can independently confirm it.
+- Immediately before installation, the iOS coordinator repeats the Phase 4 managed-path, SHA-256, archive, and release-metadata checks. For the stock-iOS Windows Companion route, the local Windows validator repeats these checks again before signing; Companion reports `Installed` only after device inventory confirms the exact bundle ID/version/build. The optional TrollStore document-import path still reports `Handed Off` because DreyzeStore cannot observe its install result.
 - The rights checkbox records who asserted distribution rights, when, for which release and attestation version. It is not proof that the assertion is true; maintainers must review source authorization independently.
+
+## Windows Companion and local signing
+
+- The Windows service binds to a selected private LAN address, presents a locally generated TLS certificate, and the iOS client pins its exact SHA-256 certificate fingerprint from QR/manual pairing data. Pair codes are short-lived and one-use; the paired bearer token is stored in iOS Keychain and only its hash is stored in Windows Credential Manager.
+- All routes except one-use pairing require the paired bearer token, the paired iPhone's client ID, a fresh timestamp, and a unique nonce. Pairing is rate-limited. The API accepts only streamed IPA bytes plus validated release metadata, never a client-selected filesystem path or URL; body length is capped.
+- The companion validates the iPhone's UDID before accepting/streaming a package. It rechecks the package digest, archive limits, bundle ID, version, build, and minimum OS locally. Signing/install uses a UUID-managed workspace; the zsign password is sent through a length-prefixed stdin pipe, not command-line arguments or environment variables. Process arguments use an argv API rather than a shell.
+- Apple credentials never leave the PC. P12 and provisioning profile bytes use Windows DPAPI; P12 password uses Windows Credential Manager. A temporary P12 file is still required by zsign and is deleted after use; deletion is not guaranteed secure erasure on SSDs or through filesystem snapshots. A stolen unlocked Windows account remains in scope.
+- `Installed` is returned only after the USB install command completes and a fresh device inventory contains the same bundle ID, version, and build. `Uninstalled` is returned only after the app disappears from inventory. Companion-local records are records of this tool's verified operation, not proof that the app remains installed later.
+- A source IPA signature/hash does not imply safety. Re-signing changes the package hash and signature; the companion records both original and signed digests. Provisioning compatibility, entitlements, extensions, device trust, Developer Mode, and Apple expiry rules can still reject installation or affect app updates/data preservation.
+- The Windows service is local only. Do not expose its port through public firewall rules, reverse proxies, router forwarding, or a public interface. Pair only on a trusted private LAN and remove an unused pairing from both endpoints.
 
 ## Deployment requirements and limits
 

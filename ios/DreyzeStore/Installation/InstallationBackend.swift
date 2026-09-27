@@ -3,12 +3,14 @@ import Foundation
 public struct InstalledApplication: Codable, Equatable, Sendable {
     public let bundleIdentifier: String
     public let version: String
+    public let build: String?
     public let sourceIdentifier: String
-    public let installedAt: Date
+    public let installedAt: Date?
 
-    public init(bundleIdentifier: String, version: String, sourceIdentifier: String, installedAt: Date) {
+    public init(bundleIdentifier: String, version: String, build: String? = nil, sourceIdentifier: String, installedAt: Date? = nil) {
         self.bundleIdentifier = bundleIdentifier
         self.version = version
+        self.build = build
         self.sourceIdentifier = sourceIdentifier
         self.installedAt = installedAt
     }
@@ -125,6 +127,11 @@ public enum InstalledState: Equatable, Sendable {
 public enum InstallationState: Equatable, Sendable {
     case ready
     case preparingInstallation
+    case connectingToCompanion
+    case transferringPackage
+    case verifyingOnCompanion
+    case signing
+    case provisioning
     case installing
     case awaitingHandoff
     case handedOff(InstallationHandoffReceipt)
@@ -135,7 +142,8 @@ public enum InstallationState: Equatable, Sendable {
 
     public var isActive: Bool {
         switch self {
-        case .preparingInstallation, .installing, .awaitingHandoff: true
+        case .preparingInstallation, .connectingToCompanion, .transferringPackage,
+             .verifyingOnCompanion, .signing, .provisioning, .installing, .awaitingHandoff: true
         default: false
         }
     }
@@ -150,6 +158,27 @@ public protocol InstallationBackend: Sendable {
     var capabilities: InstallationCapabilities { get }
 
     func install(package: VerifiedPackage) async -> InstallationDirective
+    func install(package: VerifiedPackage, onProgress: @escaping @Sendable (InstallationProgress) async -> Void) async -> InstallationDirective
+    func refreshAvailability() async
+    func cancelInstall() async
     func uninstall(bundleIdentifier: String) async -> UninstallationResult
     func queryInstalledState(bundleIdentifier: String) async -> InstalledState
+}
+
+public enum InstallationProgress: Sendable {
+    case connectingToCompanion
+    case transferringPackage
+    case verifyingOnCompanion
+    case signing
+    case provisioning
+    case installing
+}
+
+public extension InstallationBackend {
+    func install(package: VerifiedPackage, onProgress: @escaping @Sendable (InstallationProgress) async -> Void) async -> InstallationDirective {
+        await install(package: package)
+    }
+
+    func refreshAvailability() async { }
+    func cancelInstall() async { }
 }

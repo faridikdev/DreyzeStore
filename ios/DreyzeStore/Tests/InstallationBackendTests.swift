@@ -22,20 +22,32 @@ final class InstallationBackendTests: XCTestCase {
         await coordinator.refreshBackendOptions()
 
         let available = await MainActor.run { coordinator.availableBackendOptions }
-        XCTAssertEqual(available.map(\.identifier), ["trollstore", "external-handoff"])
         let automaticBackend = await MainActor.run { coordinator.automaticBackendIdentifier() }
-        XCTAssertEqual(automaticBackend, "trollstore")
         XCTAssertFalse(available.contains { $0.capabilities.contains(.confirmedInstall) })
+        if #available(iOS 26.0, *) {
+            XCTAssertTrue(available.isEmpty)
+            XCTAssertNil(automaticBackend)
+        } else {
+            XCTAssertEqual(available.map(\.identifier), ["trollstore", "external-handoff"])
+            XCTAssertEqual(automaticBackend, "trollstore")
+        }
     }
 
     func testAvailabilityStatesAreExplicitForTrollStoreSigningAndLite() {
         let trollStore = TrollStoreBackend()
         let lite = TrollStoreLiteBackend()
         let signing = DeveloperSigningBackend()
-        guard case .available = trollStore.availability,
-              case .unsupported(let liteReason) = lite.availability,
+        guard case .unsupported(let liteReason) = lite.availability,
               case .requiresConfiguration(let signingReason) = signing.availability else {
-            return XCTFail("Expected an available document-import route and explicit Lite/signing limitations.")
+            return XCTFail("Expected explicit Lite/signing limitations.")
+        }
+        if #available(iOS 26.0, *) {
+            guard case .unsupported(let reason) = trollStore.availability else {
+                return XCTFail("Stock iOS 26 must not advertise a TrollStore installation backend.")
+            }
+            XCTAssertTrue(reason.contains("Windows Companion"))
+        } else {
+            guard case .available = trollStore.availability else { return XCTFail("Document import should remain available on supported older systems.") }
         }
         XCTAssertTrue(liteReason.contains("privileged helper"))
         XCTAssertTrue(signingReason.contains("does not collect or upload Apple credentials"))
@@ -44,8 +56,12 @@ final class InstallationBackendTests: XCTestCase {
     func testTrollStoreBackendRequestsDocumentHandoffOnlyForVerifiedIPA() async throws {
         let package = try makeVerifiedPackage()
         let result = await TrollStoreBackend().install(package: package)
-        guard case .handoffRequested = result else {
-            return XCTFail("A verified IPA should enter the system document handoff, not report an installation.")
+        if #available(iOS 26.0, *) {
+            guard case .unsupported = result else { return XCTFail("Stock iOS 26 must route installation to Windows Companion.") }
+        } else {
+            guard case .handoffRequested = result else {
+                return XCTFail("A verified IPA should enter the system document handoff, not report an installation.")
+            }
         }
         XCTAssertTrue(TrollStoreBackend().capabilities.contains(.externalHandoff))
         XCTAssertFalse(TrollStoreBackend().capabilities.contains(.confirmedInstall))
@@ -61,6 +77,15 @@ final class InstallationBackendTests: XCTestCase {
     }
 
     func testTrollStoreImportCoordinatorRecordsHandoffNotInstalled() async throws {
+        if #available(iOS 26.0, *) {
+            let package = try makeVerifiedPackage()
+            let coordinator = await makeCoordinator(backends: [TrollStoreBackend()])
+            await coordinator.beginInstall(package: package, backendIdentifier: TrollStoreBackend().identifier)
+            guard case .unsupported = await MainActor.run(body: { coordinator.state }) else {
+                return XCTFail("Stock iOS 26 cannot use TrollStore as an installation method.")
+            }
+            return
+        }
         let package = try makeVerifiedPackage()
         let defaults = UserDefaults(suiteName: "DreyzeStoreTrollStoreImport-\(UUID().uuidString)")!
         let history = await MainActor.run { InstallationHistoryStore(defaults: defaults) }
@@ -91,6 +116,15 @@ final class InstallationBackendTests: XCTestCase {
     }
 
     func testTrollStoreLiteImportIsRecordedAsHandoffNotInstall() async throws {
+        if #available(iOS 26.0, *) {
+            let package = try makeVerifiedPackage()
+            let coordinator = await makeCoordinator(backends: [TrollStoreBackend()])
+            await coordinator.beginInstall(package: package, backendIdentifier: TrollStoreBackend().identifier)
+            guard case .unsupported = await MainActor.run(body: { coordinator.state }) else {
+                return XCTFail("Stock iOS 26 cannot route package installation to TrollStore Lite.")
+            }
+            return
+        }
         let package = try makeVerifiedPackage()
         let coordinator = await makeCoordinator(backends: [TrollStoreBackend()])
 

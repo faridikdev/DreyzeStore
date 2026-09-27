@@ -29,6 +29,10 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan the one-time QR code shown by your Windows Companion to pair over your local network.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Connect securely to the Windows Companion you pair with this iPhone.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

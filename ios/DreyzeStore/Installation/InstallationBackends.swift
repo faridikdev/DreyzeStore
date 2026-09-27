@@ -3,12 +3,18 @@ import Foundation
 public struct ExternalInstallerBackend: InstallationBackend {
     public let identifier = "external-handoff"
     public let displayName = "External App Handoff"
-    public let availability: BackendAvailability = .available
+    public var availability: BackendAvailability {
+        if #available(iOS 26.0, *) {
+            return .unsupported(reason: "Stock iOS 26 uses DreyzeStore Windows Companion for local signing and installation; this handoff is not an install method.")
+        }
+        return .available
+    }
     public let capabilities: InstallationCapabilities = [.externalHandoff]
 
     public init() {}
 
     public func install(package: VerifiedPackage) async -> InstallationDirective {
+        if case .unsupported(let reason) = availability { return .unsupported(.unsupported(reason)) }
         guard package.localURL.isFileURL, package.localURL.pathExtension.lowercased() == "ipa" else {
             return .failed(.packageRejected("The verified package is not a managed local IPA file."))
         }
@@ -29,12 +35,18 @@ public struct TrollStoreBackend: InstallationBackend {
     public let displayName = "TrollStore / Lite Import (Open In)"
     /// The public iOS document-import route is available. The actual recipient
     /// is selected in the system Open In menu and is verified by its bundle ID.
-    public let availability: BackendAvailability = .available
+    public var availability: BackendAvailability {
+        if #available(iOS 26.0, *) {
+            return .unsupported(reason: "Stock iOS 26 requires a paired Windows Companion for app installation.")
+        }
+        return .available
+    }
     public let capabilities: InstallationCapabilities = [.externalHandoff]
 
     public init() {}
 
     public func install(package: VerifiedPackage) async -> InstallationDirective {
+        if case .unsupported(let reason) = availability { return .unsupported(.unsupported(reason)) }
         guard package.localURL.isFileURL,
               package.localURL.pathExtension.lowercased() == "ipa",
               FileManager.default.isReadableFile(atPath: package.localURL.path) else {
@@ -128,6 +140,7 @@ public struct DeveloperSigningBackend: InstallationBackend {
 
 public enum InstallationBackendCatalog {
     public static let standard: [any InstallationBackend] = [
+        WindowsCompanionInstallationBackend(),
         TrollStoreBackend(),
         ExternalInstallerBackend(),
         TrollStoreLiteBackend(),

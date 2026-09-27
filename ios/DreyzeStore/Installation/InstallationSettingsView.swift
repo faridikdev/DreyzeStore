@@ -9,6 +9,21 @@ struct InstallationSettingsView: View {
                 Text("Installation methods depend on your device and environment. DreyzeStore reports a confirmed install only when the selected backend can verify it.")
                     .font(.footnote).foregroundStyle(.secondary)
             }
+            Section("Local Computer") {
+                NavigationLink {
+                    WindowsCompanionPairingView()
+                } label: {
+                    Label("Connect Windows Companion", systemImage: "desktopcomputer")
+                }
+                if let connection = WindowsCompanionPairingStore.load() {
+                    LabeledContent("Computer", value: connection.endpoint.host ?? "Paired")
+                    LabeledContent("iPhone", value: connection.deviceName ?? "Not connected")
+                    LabeledContent("Signing", value: connection.signingConfigured ? "Configured" : "Not configured")
+                    if let expiration = connection.provisioningExpiresAt {
+                        LabeledContent("Profile Expires", value: expiration.formatted(date: .abbreviated, time: .shortened))
+                    }
+                }
+            }
             Section("Methods") {
                 ForEach(coordinator.backendOptions) { option in
                     VStack(alignment: .leading, spacing: 5) {
@@ -45,6 +60,9 @@ struct InstallationSettingsView: View {
     }
 
     private func explanation(_ option: InstallationBackendOption) -> String {
+        if option.identifier == WindowsCompanionInstallationBackend().identifier {
+            return "Local LAN install: the Companion re-verifies this package, signs it on your Windows PC, installs it over USB, and confirms the exact release in device inventory. Apple account credentials stay on the PC."
+        }
         if option.identifier == TrollStoreBackend().identifier {
             return "Uses iOS Open In for the com.apple.itunes.ipa document type. TrollStore or TrollStore Lite can receive the file when installed and registered; select the destination in the system menu. Its installation prompt follows its own settings. DreyzeStore reports Handed Off, not Installed."
         }

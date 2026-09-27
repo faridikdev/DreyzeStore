@@ -1,0 +1,58 @@
+[package]
+name = "dreyzestore-companion"
+version = "0.1.0"
+description = "Local Windows installation companion for DreyzeStore"
+authors = ["DreyzeStore contributors"]
+edition = "2024"
+
+[package.metadata.tauri-winres]
+FileDescription = "DreyzeStore Companion"
+ProductName = "DreyzeStore Companion"
+ProductVersion = "0.1.0"
+OriginalFilename = "DreyzeStore Companion.exe"
+LegalCopyright = "Copyright DreyzeStore contributors"
+
+[lib]
+name = "dreyzestore_companion_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+axum = { version = "0.8", features = ["json", "macros"] }
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+base64 = "0.22"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde", "clock"] }
+hex = "0.4"
+futures-util = "0.3"
+hmac = "0.12"
+http = "1"
+local-ip-address = "0.6"
+plist = "1"
+rand = "0.9"
+rcgen = { version = "0.13", features = ["pem", "x509-parser"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "stream", "json"] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+subtle = "2"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+thiserror = "2"
+time = "0.3"
+tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+zip = { version = "2", default-features = false, features = ["deflate", "deflate-flate2"] }
+zeroize = { version = "1", features = ["derive"] }
+keyring = { version = "3", features = ["windows-native"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }

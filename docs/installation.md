@@ -1,6 +1,16 @@
 # Installation architecture and research
 
-**Status:** Phase 5.5. The iOS app has one usable real installation route on compatible devices: it hands a previously verified local IPA to TrollStore or TrollStore Lite through Apple's document Open In menu. The target app owns the installation flow; its confirmation prompt can be enabled or disabled in its own settings. DreyzeStore observes only the completed file handoff and records **Handed Off**, never **Installed**. The physical-device flow has not yet been tested.
+**Current status (Phase 6.5):** The stock-iOS path is the Windows Companion prototype documented in [windows-companion.md](windows-companion.md). The client pairs to a local Windows app, transfers its Phase 4 `VerifiedPackage`, and the Windows service independently revalidates, signs with a user-imported Apple Development identity/profile, installs through the paired USB device service, and reads app inventory before returning `Installed`. The repository has automated tests for this pipeline, but the physical iPhone/signing flow remains **NOT VERIFIED**. DreyzeStore does not claim that simulator tests prove device installation.
+
+The Phase 5.5 TrollStore document-import route remains a separate optional handoff for a compatible environment where TrollStore is already installed. It is not the stock iOS 26 installation mechanism and reports **Handed Off**, never **Installed**. No TrollStore/CoreTrust or jailbreak implementation is included in the standard iOS app.
+
+| Environment | Mechanism in DreyzeStore | Installs? | What DreyzeStore can confirm |
+|---|---|---:|---|
+| Stock sandboxed iOS 26 + paired Windows Companion | Local pinned TLS transfer; Windows validates, signs and calls device installation service over trusted USB | Yes, with a valid local identity/profile and compatible package/device | Exact bundle ID/version/build appears in device inventory after install |
+| Compatible legacy environment with TrollStore | Apple document Open In to TrollStore | TrollStore may install after its own confirmation | Handoff only |
+| Standard sandboxed iOS without Companion | No arbitrary IPA installation API | No | Downloaded and verified package only |
+
+Windows Companion does not create Apple identities, register devices, provision Personal Team apps, or upload credentials. The user supplies a certificate/profile that authorizes the package and connected UDID. Consult [Apple signing constraints](apple-signing.md) and the [physical-device test plan](windows-companion-device-test.md).
 
 `VerifiedPackage` is the only input accepted by `InstallationBackend`. Before handoff, `InstallationCoordinator` asks `PackageValidator` to verify the PackageStorage receipt, file location, SHA-256, archive structure, release metadata, bundle ID, version, build, and minimum OS again. No arbitrary URL or server-only release model can enter the handoff route. No TrollStore source or exploit code is copied into this repository.
 

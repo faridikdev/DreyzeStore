@@ -18,6 +18,8 @@ public final class InstallationCoordinator: ObservableObject {
     private var activeOperationID: UUID?
     private var pendingBackend: (any InstallationBackend)?
     private var pendingPackageRecord: StoredVerifiedPackage?
+    private var activeInstallationBackend: (any InstallationBackend)?
+    private var activeInstallationTask: Task<InstallationDirective, Never>?
 
     init(
         storage: PackageStorage,
@@ -37,6 +39,7 @@ public final class InstallationCoordinator: ObservableObject {
     public func refreshBackendOptions() async {
         var options: [InstallationBackendOption] = []
         for backend in backends {
+            await backend.refreshAvailability()
             options.append(InstallationBackendOption(
                 identifier: backend.identifier,
                 displayName: backend.displayName,
@@ -93,7 +96,16 @@ public final class InstallationCoordinator: ObservableObject {
             guard activeOperationID == operationID else { return }
             transition(to: .installing)
 
-            let directive = await backend.install(package: verified)
+            activeInstallationBackend = backend
+            let task = Task { [weak self] in
+                await backend.install(package: verified) { [weak self] progress in
+                    await self?.report(progress, operationID: operationID)
+                }
+            }
+            activeInstallationTask = task
+            let directive = await task.value
+            activeInstallationTask = nil
+            activeInstallationBackend = nil
             guard activeOperationID == operationID else { return }
             switch directive {
             case .installed(let installed):
@@ -185,6 +197,12 @@ public final class InstallationCoordinator: ObservableObject {
 
     public func cancel() {
         guard state.isActive else { return }
+        activeInstallationTask?.cancel()
+        activeInstallationTask = nil
+        if let backend = activeInstallationBackend {
+            Task { await backend.cancelInstall() }
+        }
+        activeInstallationBackend = nil
         activeOperationID = nil
         pendingHandoffPackage = nil
         pendingHandoffBackendIdentifier = nil
@@ -227,5 +245,17 @@ public final class InstallationCoordinator: ObservableObject {
     private func transition(to nextState: InstallationState) {
         state = nextState
         stateHistory.append(nextState)
+    }
+
+    private func report(_ progress: InstallationProgress, operationID: UUID) {
+        guard activeOperationID == operationID else { return }
+        switch progress {
+        case .connectingToCompanion: transition(to: .connectingToCompanion)
+        case .transferringPackage: transition(to: .transferringPackage)
+        case .verifyingOnCompanion: transition(to: .verifyingOnCompanion)
+        case .signing: transition(to: .signing)
+        case .provisioning: transition(to: .provisioning)
+        case .installing: transition(to: .installing)
+        }
     }
 }

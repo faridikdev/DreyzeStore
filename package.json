@@ -9,7 +9,8 @@
   "workspaces": [
     "shared",
     "backend",
-    "admin"
+    "admin",
+    "apps/windows-companion"
   ],
   "scripts": {
     "lint": "eslint . --ext .js,.mjs,.ts,.tsx",

@@ -176,8 +176,28 @@ struct DownloadFlowSheet: View {
             progressState(title: "Preparing Installation", message: "Rechecking the saved checksum and IPA metadata.", symbol: "checkmark.shield") {
                 Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
             }
+        case .connectingToCompanion:
+            progressState(title: "Connecting to Computer", message: "Opening the pinned local connection to your paired Windows Companion.", symbol: "desktopcomputer") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .transferringPackage:
+            progressState(title: "Sending Package", message: "Transferring the verified IPA over your local network.", symbol: "arrow.up.doc") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .verifyingOnCompanion:
+            progressState(title: "Verifying on Computer", message: "Windows Companion is checking the SHA-256 and app metadata again.", symbol: "checkmark.shield") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .signing:
+            progressState(title: "Signing App", message: "The local Apple Development identity is signing the app on your computer.", symbol: "signature") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
+        case .provisioning:
+            progressState(title: "Preparing Provisioning", message: "Checking the local profile for this app and connected iPhone.", symbol: "person.badge.key") {
+                Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
+            }
         case .installing:
-            progressState(title: "Preparing Handoff", message: "The verified package is being prepared for the selected method.", symbol: "square.and.arrow.up") {
+            progressState(title: "Installing on iPhone", message: "Windows Companion is sending the signed app to the connected iPhone and will confirm its installed version.", symbol: "iphone.and.arrow.down") {
                 Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
             }
         case .awaitingHandoff:
@@ -215,11 +235,17 @@ struct DownloadFlowSheet: View {
                 NavigationLink("View Package Details") { DownloadedPackageDetailsView(package: record) }
                     .buttonStyle(.bordered)
             }
-            Button("Install") {
+            Button(installationCoordinator.availableBackendOptions.isEmpty ? "Computer Required" : "Install") {
                 showingInstallConfirmation = true
             }
             .buttonStyle(.borderedProminent).tint(StorePalette.accent)
             .disabled(installationCoordinator.availableBackendOptions.isEmpty)
+            if #available(iOS 26.0, *), installationCoordinator.availableBackendOptions.isEmpty {
+                NavigationLink("Connect Windows Companion") { WindowsCompanionPairingView() }
+                    .buttonStyle(.bordered)
+                Text("Connect a paired Windows Companion with a trusted iPhone and local signing identity to install on stock iOS 26.")
+                    .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            }
             Button("Done") { dismiss() }.buttonStyle(.bordered)
         }
         .frame(maxWidth: 360).frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -239,7 +265,9 @@ struct DownloadFlowSheet: View {
             }
             .padding(.horizontal, 14)
             .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Text(selectedBackendIdentifier == TrollStoreBackend().identifier
+            Text(selectedBackendIdentifier == WindowsCompanionInstallationBackend().identifier
+                 ? "The paired Windows Companion will recheck this IPA, sign it locally with your configured Apple Development identity, and install it on the connected iPhone. DreyzeStore reports Installed only after the Companion reads back the exact bundle ID, version, and build from device inventory."
+                 : selectedBackendIdentifier == TrollStoreBackend().identifier
                  ? "The system Open In menu will pass this verified IPA to TrollStore or TrollStore Lite when installed and registered. The receiving app owns installation and its confirmation settings; DreyzeStore can only report the file handoff."
                  : "Package verified. Sharing it to another app does not confirm installation.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

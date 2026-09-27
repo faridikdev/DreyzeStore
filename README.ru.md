@@ -2,26 +2,28 @@
 
 [English](README.md) · **Русский**
 
-DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория и панели публикации. Проект развивается по этапам. **PHASE 6 добавляет аутентификацию администраторов, черновики приложений, приватную загрузку IPA, изолированную серверную проверку, подтверждение прав на распространение и публикацию после review.**
+DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 6 добавляет публикацию релизов после review; PHASE 6.5 — прототип Windows Companion и локальный pipeline работы с устройством.**
 
-iOS-клиент скачивает опубликованный пакет, проверяет SHA-256 и структуру IPA, затем на совместимом устройстве может передать `VerifiedPackage` в TrollStore через документный импорт Apple. DreyzeStore сообщает **Handed Off**, поскольку не может подтвердить результат установки в принимающем приложении. Обычная sandbox-сборка iOS не может устанавливать произвольные IPA или перечислять все установленные приложения.
+iOS-клиент скачивает опубликованные пакеты и проверяет SHA-256 и структуру IPA. На обычной iOS он может спариться с Windows Companion через локальное TLS-соединение с закреплённым сертификатом. Windows повторно проверяет пакет, подписывает локально импортованной Apple Development identity, устанавливает через доверенный USB-сервис устройства и подтверждает точные bundle ID/version/build по inventory. Только после этого интерфейс сообщает **Installed**. Этот прототип пока не проверен с настоящим iPhone и signing identity. Передача в TrollStore остаётся отдельным необязательным путём для совместимых сред и сообщает **Handed Off**, а не **Installed**.
 
 ## Архитектура
 
 - `ios/DreyzeStore` — SwiftUI-клиент (iOS 16+), типизированный async API, offline-кэш метаданных, скачивание пакетов, проверка SHA-256/IPA и передача только проверенного пакета.
 - `backend` — Cloudflare Worker на Hono и TypeScript, D1 для метаданных, приватный R2 staging и публичный R2 distribution bucket.
 - `admin` — адаптивная панель на React, TypeScript и Vite для черновиков, загрузки ресурсов, review релизов, Today/featured и публикации.
+- `apps/windows-companion` — Tauri 2/React UI и Rust API, интеграция с USB device service, DPAPI/Credential Manager, повторная проверка IPA, локальная подпись через `zsign`, установка, подтверждение, inventory, uninstall и refresh того же релиза.
 - `shared/schemas` — версионированная JSON Schema репозитория и общая проверка DTO.
 - `scripts/validate_ipa.py` — изолированный ограниченный валидатор IPA, запускаемый workflow GitHub Actions.
-- `.github/workflows/ci.yml` — проверки backend/admin и macOS-сборка iOS Simulator. `.github/workflows/validate-ipa.yml` — проверка выбранной загрузки с аутентификацией OIDC.
+- `.github/workflows/ci.yml` — проверки backend/admin, macOS-сборка iOS Simulator и Windows-тесты/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — проверка выбранной загрузки с аутентификацией OIDC.
 
-Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
+Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [ограничения Apple signing](docs/apple-signing.md), [план проверки на устройстве](docs/windows-companion-device-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
 
 ## Требования
 
 - Node.js 22.12+ и npm.
 - Python 3 для проверки IPA и D1 migrations.
 - macOS и Xcode для локальной iOS-сборки; публичный GitHub Actions workflow использует macOS runner.
+- Windows 11, Node.js, Rust MSVC, Visual Studio C++ Build Tools и Python для сборки Companion и закреплённого `zsign`. `pymobiledevice3` и Apple Mobile Device Service из классического iTunes устанавливаются отдельно на локальный компьютер.
 - Cloudflare credentials не нужны для локального каталога и тестов. Production-ресурсы автоматически не создаются.
 
 ## Локальный backend и панель
@@ -54,6 +56,10 @@ xcodebuild test -project ios/DreyzeStore/DreyzeStore.xcodeproj -scheme DreyzeSto
 ```
 
 Debug-конфигурация использует `http://127.0.0.1:8787/api/v1`. Release пока указывает на зарезервированный `.invalid`, пока оператор не настроит одобренный публичный endpoint.
+
+## Windows Companion
+
+См. [настройку и границы signing](docs/windows-companion.md). Companion installer не подписан и предназначен для разработки; Apple credentials и device service в пакет не входят. Для локальной подписи нужны предоставленные пользователем Apple Development identity и provisioning profile, включающий целевой iPhone. Companion не автоматизирует Apple Account или Personal Team provisioning. Установка на физическом устройстве пока не проверена.
 
 ## Безопасность и права на релизы
 
