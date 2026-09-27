@@ -145,6 +145,34 @@ Errors do not include SQL, stack traces, bucket keys, or D1 internals. Validatio
 
 Stable public catalog reads use `ETag` and bounded `Cache-Control` lifetimes and support `If-None-Match` (`304 Not Modified`). `/updates` is `no-store`. Errors are `no-store`. CORS only reflects exact origins listed in `ADMIN_ORIGINS`; it is not a wildcard. The local setting permits the Vite dev origin.
 
-## Current limits
+## Admin and validator APIs
 
-The local `.invalid` asset/package URLs are placeholders, so sample package links are intentionally not downloadable. This phase does not transfer bytes from R2, accept uploads, install apps, authenticate admins, or deploy Cloudflare resources. Those operations must be implemented in their later phases.
+The admin web client uses these endpoints with `credentials: include`. Login sets an opaque HttpOnly cookie; the response returns a CSRF token that the client keeps in memory and sends as `X-CSRF-Token` on each write. The server checks exact `Origin`, CSRF, session expiry and role. Authenticated responses use `Cache-Control: no-store`.
+
+| Method and path | Purpose | Access |
+|---|---|---|
+| `POST /admin/auth/login` | Sign in with email/password | Public; exact Admin Origin required; rate-limited |
+| `GET /admin/auth/session` | Read current principal and fresh CSRF token | Session |
+| `POST /admin/auth/logout` | Revoke session | Session + CSRF |
+| `GET /admin/dashboard` | Draft/published counts, storage summary and recent audit activity | Session |
+| `GET /admin/categories`, `GET /admin/repositories` | Safe form choices | Session |
+| `GET/POST /admin/apps` | List or create app draft | Session; POST + CSRF |
+| `GET/PATCH/DELETE /admin/apps/{id}` | Read/edit draft or soft-delete eligible draft | Session; writes + CSRF; delete requires admin role |
+| `POST /admin/apps/{id}/unpublish` | Remove an app from public catalog/featured | Admin + CSRF + confirmation |
+| `GET /admin/apps/{id}/screenshots` | Read app screenshot list | Session |
+| `POST /admin/apps/{id}/assets` | Create bounded icon/screenshot upload session | Session + CSRF |
+| `POST /admin/assets/{id}/complete` | Inspect and publish uploaded image bytes | Session + CSRF |
+| `DELETE /admin/apps/{id}/screenshots/{screenshotId}` | Remove screenshot and reorder remaining list | Session + CSRF + confirmation |
+| `PUT /admin/apps/{id}/screenshots/order` | Reorder screenshots | Session + CSRF |
+| `POST /admin/apps/{id}/uploads` | Create a private IPA upload session | Session + CSRF |
+| `POST /admin/uploads/{id}/complete` | Verify exact R2 object size and queue isolated validation | Session + CSRF |
+| `GET/PATCH /admin/uploads/{id}` | Review validated metadata, notes and release channel | Session; PATCH + CSRF |
+| `POST /admin/uploads/{id}/publish` | Publish validated/reviewed release with rights attestation | Admin + CSRF + explicit attestation |
+| `POST /admin/uploads/{id}/reject` | Reject upload and remove staging package | Admin + CSRF + confirmation |
+| `GET /admin/featured`, `PUT /admin/featured/{section}` | Read/update Today order | Session; write + CSRF; only published apps accepted |
+
+Package and image bodies go directly to the signed R2 `uploadURL` with the returned `requiredHeaders`. Local-only `/admin/uploads/{id}/local` and `/admin/assets/{id}/local` endpoints exist only when local flags are enabled; they are not used for production storage.
+
+The internal workflow callbacks are `POST /validator/uploads/{id}/lease` and `POST /validator/uploads/{id}/result`. Both require GitHub Actions OIDC identity; the lease also requires a worker-created one-run ticket. They are not admin endpoints and never accept a client-authored `validation passed` flag.
+
+Detailed fields, upload states, response examples, GitHub identity requirements and setup are in [admin](admin.md), [upload pipeline](upload-pipeline.md) and [validator](validator.md). Public seed package URLs are reserved `.invalid` placeholders and cannot be downloaded. No Cloudflare production resources have been created or deployed.

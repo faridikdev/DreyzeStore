@@ -11,6 +11,7 @@ License identifiers below are from the resolved package metadata/notice files in
 | Component | Purpose | License |
 |---|---|---|
 | Hono | Worker HTTP routing | MIT |
+| argon2id 1.0.1 | Argon2id password KDF (prebuilt upstream Wasm) | MIT |
 | Ajv, ajv-formats | JSON Schema validation | MIT |
 | React, React DOM, Vite, `@vitejs/plugin-react` | Admin web application | MIT |
 | Wrangler | Local Worker tooling and dry-run bundling | MIT OR Apache-2.0 |
@@ -21,5 +22,7 @@ License identifiers below are from the resolved package metadata/notice files in
 | ZIPFoundation 0.9.20 | Bounded ZIP entry inspection for IPA metadata | MIT |
 
 The ZIPFoundation package is pinned in `ios/DreyzeStore/DreyzeStore.xcodeproj/project.pbxproj`; its upstream notice is reproduced in [`docs/third-party/ZIPFoundation-MIT.txt`](third-party/ZIPFoundation-MIT.txt). No ZIPFoundation source code is vendored. The GitHub Actions workflow pins official GitHub-maintained actions to commit SHAs; review their upstream license notices when changing those pins.
+
+`argon2id` is an npm runtime dependency from [openpgpjs/argon2id](https://github.com/openpgpjs/argon2id). Its MIT copyright and permission notice (including Proton AG and Emil Bay attribution) is reproduced in [`docs/third-party/argon2id-MIT.txt`](third-party/argon2id-MIT.txt). Only the published dependency package is used; DreyzeStore does not copy or modify its implementation source.
 
 For the exact resolved dependency graph, consult `package-lock.json` and each package's included license/notice file.

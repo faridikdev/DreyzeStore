@@ -2,46 +2,29 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 5.5 adds a VerifiedPackage-only Open In document handoff that lets an installed TrollStore or TrollStore Lite receive an IPA on compatible devices.** The receiving app owns installation and its prompt settings; DreyzeStore records only `Handed Off` because it cannot observe the final install result. Administrator authentication/editing and production deployment remain future work.
+DreyzeStore is an open-source native iOS catalog, package verification client, Cloudflare Workers API, repository format, and administrator publishing panel. The project is developed in phases. **Phase 6 adds password-authenticated administration, app drafts, private IPA staging, isolated server validation, rights attestation, and reviewed release publishing.**
 
-An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
+The iOS client downloads and verifies published packages, then can hand a `VerifiedPackage` to TrollStore through Apple's document import route on compatible devices. DreyzeStore records that as **Handed Off**; it cannot confirm the receiver's installation. Standard sandboxed iOS still cannot install arbitrary IPA files or enumerate all installed apps.
 
 ## Architecture
 
-- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, a managed download/verification pipeline, and document Open In handoff for verified IPAs. The app does not claim installation success from the handoff.
-- `backend`: TypeScript Cloudflare Worker using Hono, local D1 migrations, and local R2 bindings for eventual public assets and private staging. App summaries include a bounded short description so catalog cards do not fetch detail records one by one.
-- `admin`: React, TypeScript, and Vite static administration client. Phase 1 performs an API health check; write workflows and authentication are deferred.
-- `shared`: repository JSON Schema v1 and shared API DTOs.
-- `.github/workflows/ci.yml`: Linux backend/admin checks and macOS simulator build/test.
+- `ios/DreyzeStore` — SwiftUI client (iOS 16+), typed async API, offline metadata cache, package downloads, SHA-256 and IPA validation, and verified document handoff.
+- `backend` — Cloudflare Worker with Hono, TypeScript, D1 metadata, private R2 staging, and a public R2 distribution bucket.
+- `admin` — React/TypeScript/Vite responsive panel for app drafts, asset uploads, release review, featured content, and publishing.
+- `shared/schemas` — versioned repository JSON Schema and shared DTO validation.
+- `scripts/validate_ipa.py` — isolated, bounded IPA metadata validator used by the GitHub Actions validator workflow.
+- `.github/workflows/ci.yml` — backend/admin checks and macOS iOS simulator build/tests. `.github/workflows/validate-ipa.yml` — OIDC-authenticated, per-upload validation workflow.
 
-See [architecture](docs/architecture.md), [iOS client](docs/ios-client.md), [backend development](docs/backend.md), [API reference](docs/api.md), [repository format](docs/repository-format.md), [installation boundary](docs/installation.md), [security](docs/security.md), [licenses](docs/licenses.md), [CI boundary](docs/ci.md), and [deployment boundary](docs/deployment.md).
-
-## Screenshots
-
-The native client includes Today, Apps, Search, app details with screenshot gallery and version history, Updates, Library, and Settings. GET downloads the published release, verifies its checksum and IPA metadata, then lists it as a verified download. It does not install it. The catalog displays only metadata returned by the configured API. Screenshots from the running app will be added after simulator review.
+See [architecture](docs/architecture.md), [API](docs/api.md), [admin operations](docs/admin.md), [bootstrap](docs/admin-bootstrap.md), [upload pipeline](docs/upload-pipeline.md), [validator](docs/validator.md), [security](docs/security.md), [installation](docs/installation.md), [licenses](docs/licenses.md), and [deployment boundaries](docs/deployment.md).
 
 ## Requirements
 
 - Node.js 22.12+ and npm.
-- Python 3 for the local D1 migration check.
-- macOS and Xcode for iOS builds and XCTest.
-- No Cloudflare account is needed for local API development. No production resources are created by this repository's setup or CI.
+- Python 3 for package validation and migration checks.
+- macOS and Xcode for a local iOS build; public GitHub Actions runs the simulator build on macOS.
+- Cloudflare credentials are not needed for local catalog development or tests. Production resources are not created by setup or CI.
 
-## Building the iOS client
-
-Open `ios/DreyzeStore/DreyzeStore.xcodeproj` in Xcode, or run on macOS:
-
-```sh
-xcodebuild test \
-  -project ios/DreyzeStore/DreyzeStore.xcodeproj \
-  -scheme DreyzeStore \
-  -destination 'platform=iOS Simulator,name=<available iPhone>' \
-  CODE_SIGNING_ALLOWED=NO
-```
-
-The Debug configuration points at `http://127.0.0.1:8787/api/v1` for the local Worker. Override the `DREYZE_API_BASE_URL` Xcode build setting to use another development endpoint. Release builds remain pointed at the reserved `.invalid` domain until an approved production endpoint exists. No mock catalog is compiled into the app.
-
-## Running the backend
+## Local backend and admin
 
 ```sh
 npm ci
@@ -50,39 +33,39 @@ npm run db:seed:local
 npm run dev:api
 ```
 
-The Worker serves the public catalog API under `/api/v1/`, including app listing/details/versions, categories, featured sections, search, updates, repository-v1 generation, and health. API requests and response examples are in [docs/api.md](docs/api.md). The local seed contains fictional metadata and placeholder `.invalid` asset URLs only; no IPA files are included. Wrangler uses local D1 and R2 emulation. With the Worker running, `npm run smoke:api:local` exercises it against local D1 and validates the repository response. Do not pass remote flags during local development.
+In a second terminal, configure the Vite panel and start it:
 
-## Running the admin panel
-
-In another terminal:
-
-```powershell
-Copy-Item admin/.env.example admin/.env.local
+```sh
+Copy-Item admin/.env.example admin/.env.local # PowerShell
 npm run dev:admin
 ```
 
-The panel checks the configured API. It does not show fictional app entries, accept credentials, or offer nonfunctional editing controls. Authentication and management arrive in a later phase.
+Local D1 seed records are fictional and use reserved `.invalid` asset/package URLs. A generated IPA fixture exists only during tests. For an end-to-end publishing exercise, run `npm run admin:e2e:local`; it uses an in-memory D1/R2-compatible test harness, the real Python validator, and the same Hono endpoints without storing an IPA in Git. To create a local sign-in, apply migrations and use `npm run admin:bootstrap:local -- --email=you@example.test`; the random password is printed once.
 
-## Cloudflare setup
+Copy `backend/.dev.vars.example` to `backend/.dev.vars` for local authentication/upload flags, and `admin/.env.example` to `admin/.env.local` for the panel URL. The production-style validation path requires the GitHub App and workflow settings documented in [validator setup](docs/validator.md). No production credentials are present in the repository.
 
-`backend/wrangler.jsonc` contains a placeholder D1 ID and local bucket names. These names configure Wrangler's local bindings; they do not create cloud resources. Production D1/R2, domains, DNS, and secrets are deliberately not configured. Review [deployment.md](docs/deployment.md) and obtain explicit approval before any future paid or production action.
+## iOS
 
-## Repository format
+Open `ios/DreyzeStore/DreyzeStore.xcodeproj` in Xcode or run on macOS:
 
-Repository v1 is JSON Schema Draft 2020-12 at [shared/schemas/repository-v1.schema.json](shared/schemas/repository-v1.schema.json). It strictly validates HTTPS URLs without credentials, UTC timestamps, reverse-DNS identifiers, version/build, minimum OS, screenshot metadata, package size, and lowercase SHA-256. The same runtime validator adds duplicate identifier checks. The generated iOS ZIP fixture exists only during XCTest; no IPA is checked in or served as catalog data.
+```sh
+xcodebuild test -project ios/DreyzeStore/DreyzeStore.xcodeproj -scheme DreyzeStore \
+  -destination 'platform=iOS Simulator,name=<available iPhone>' CODE_SIGNING_ALLOWED=NO
+```
 
-## Installation backends
+The Debug configuration targets `http://127.0.0.1:8787/api/v1`. Release configuration remains pointed at a reserved `.invalid` host until an operator configures an approved public endpoint.
 
-Installation accepts only a `VerifiedPackage`; the coordinator checks the managed storage receipt and repeats SHA-256 and IPA metadata validation before invoking a backend. On compatible devices with TrollStore or TrollStore Lite installed, DreyzeStore can hand the verified IPA through Apple's `com.apple.itunes.ipa` Open In document route. The selected receiver owns the installation flow and its confirmation settings. DreyzeStore reports **Handed Off** when iOS reports that the file was sent; it cannot confirm installation, inventory installed apps, or uninstall them. A generic system share-sheet handoff remains available as fallback. No exploit code or upstream TrollStore source is included. See [installation.md](docs/installation.md) for the capability matrix, signing architecture, and upstream research, plus the [physical-device test plan](docs/physical-device-install-test.md).
+## Security and release rights
 
-## Security
+Admin passwords are Argon2id-hashed in an internal Durable Object KDF. Sessions use hashed opaque tokens in D1 and HttpOnly cookies; writes require CSRF validation. IPA bytes stay in private staging until a pinned GitHub Actions workflow validates the package and an administrator reviews metadata and attests to distribution rights. Published objects have immutable keys. Client-side SHA-256 and package validation still run after download.
 
-See [SECURITY.md](SECURITY.md) and [docs/security.md](docs/security.md). Never commit credentials, `.env` files, IPA/TIPA packages, signing keys, or production configuration. A matching checksum establishes integrity against a repository's published digest, not that an app or publisher is safe.
+A matching SHA-256 confirms integrity against the published digest; it does not establish that software is safe, lawful, or malware-free. The MIT project license grants no rights to application packages, icons, screenshots, or repository content.
 
-## Licenses
+## Checks
 
-DreyzeStore source code is licensed under MIT. Repository content, screenshots, and application packages require their own distribution rights; the project license grants no rights to them. Direct third-party dependency licenses reviewed for Phase 1 are listed in [docs/licenses.md](docs/licenses.md).
+```sh
+npm run check
+npm run admin:e2e:local
+```
 
-## Contributing
-
-Use the documented phases and keep each change reviewable. Run `npm run check`, validate migrations, and run the Xcode test scheme on macOS for iOS changes. Do not claim unfinished routes or installation behavior as complete. See [developer workflow](docs/developer-workflow.md).
+The full check includes lint, TypeScript checks, tests, Python validator tests, migration validation, and an Admin build plus Wrangler Worker dry-run. No deployment, paid resource creation, DNS change, or production secret setup is part of these commands.

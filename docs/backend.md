@@ -1,10 +1,8 @@
 # Backend development
 
-The public API is a TypeScript Cloudflare Worker using Hono. Routes call catalog services; services validate stored data and map public DTOs; repositories own all D1 SQL. D1 stores catalog metadata. R2 bindings are configured for future public assets and private staging, but this phase does not upload, retrieve, or stream package bytes.
+The API is a versioned Hono application running on Cloudflare Workers. Request handlers validate HTTP inputs and delegate to services; services implement catalog, auth, asset and publishing rules; repositories own D1 SQL. D1 is the metadata source of truth. R2 bindings separate private staging from published packages and public artwork.
 
-## Local commands
-
-From the repository root:
+## Local API
 
 ```sh
 npm ci
@@ -13,22 +11,28 @@ npm run db:seed:local
 npm run dev:api
 ```
 
-Wrangler serves `http://localhost:8787`. The development seed contains only fictional metadata and `.invalid` asset/package URLs; it does not contain IPA files or create R2 objects. The seed is intended for the local database only.
+Wrangler uses local D1/R2 emulation and the `AdminPasswordKdf` Durable Object binding. The SQL seed contains fictional metadata and `.invalid` URLs; it contains no package. `backend/.dev.vars.example` contains local-only placeholders. Copy it to `backend/.dev.vars` to enable local-only upload endpoints; never copy its values into production.
 
-`GET /api/v1/health` checks the local D1 binding. The public catalog endpoints and their contracts are documented in [api.md](api.md). Do not add `--remote` to local commands. The default build is a Worker dry-run and does not deploy or provision resources.
+The API is documented in [api.md](api.md). Public responses are allowlisted; drafts, unpublished releases, R2 keys, session data, rights attestations, validator state, and audit rows are not returned by public catalog endpoints. Catalog responses use bounded cache headers/ETags; account and update responses are `no-store`.
 
-## API and data layers
+## Services and security boundaries
 
-The API is versioned under `/api/v1/`. Routes validate query and path inputs and return a common `{ "error": { "code", "message", "requestId" } }` shape for failures. Public success responses use `{ "data": ..., "meta": ... }`, except `/repository`, which is the repository-v1 document itself. Catalog reads only include published, non-deleted apps with at least one published release. Release and asset metadata is validated before it leaves the Worker.
+- `routes/` — HTTP endpoint and body/query validation.
+- `services/` — catalog reads, password/session auth, assets, R2 upload URLs, upload state transitions, review and publish.
+- `repositories/` — prepared D1 statements and conditional state changes.
+- `security/` — CSRF, session cookies, role checks, OIDC, capability token hashing and password KDF client.
+- `passwordKdfDo.ts` — an internal, non-routed Durable Object that runs Argon2id from statically bundled upstream WebAssembly. Password text is sent only through the Workers internal object binding; it is never written to D1 or audit logs.
 
-`backend/src/routes/` contains HTTP handlers, `services/` owns public DTO construction and domain rules, `repositories/` owns D1 queries, and `db/` contains binding utilities. Prepared statements are used for data values; sorting clauses are selected from fixed allowlists. Pagination is bounded to 100 items and page numbers to 1000. Search uses the local D1 FTS5 index and tokenized, bound query expressions.
-
-The repository response is generated from published rows and validated with the shared JSON Schema v1 validator before it is returned. It exposes public HTTPS URLs derived from asset references, not D1 columns such as `ipa_object_key` or admin/audit data.
+Workers production WebCrypto rejects PBKDF2 derivations above the runtime's limit, so the original 600,000-iteration browser-independent PBKDF2 approach would fail at login. New accounts use Argon2id (`m=19,456 KiB`, `t=2`, `p=1`) in the KDF Durable Object. Existing bounded PBKDF2 credential rows are preserved by migration 0004 and rehashed to Argon2id after the next successful login. See [ADR 0003](adr/0003-admin-password-kdf.md).
 
 ## D1 and R2
 
-`backend/migrations/` contains ordered SQL migrations. `0001_initial_schema.sql` is preserved; `0002_public_catalog.sql` adds public-catalog indexes, bounded publication constraints, and the FTS5 index/triggers. `python scripts/validate_migrations.py` executes the migrations against SQLite, checks indexes/foreign keys and constraints, then verifies the seed and search index.
+Migrations are append-only in `backend/migrations/`. `python scripts/validate_migrations.py` applies them in a temporary SQLite database and checks constraints, indexes, foreign keys, FTS search, seed exposure, and migration of a legacy password row. `0004_argon2id_admin_credentials.sql` changes credential parameters without discarding existing hashes.
 
-The checked-in Wrangler configuration is local-development configuration. Its D1 identifier is a placeholder and R2 bucket names configure only local bindings; no production D1/R2 resources, DNS, or secrets are created. `PUBLIC_ASSETS_BASE_URL` must be an HTTPS public asset host in a future deployment. Package object keys are only metadata references at this stage; downloads and package validation are later phases.
+Private R2 staging contains only server-generated `staging/{uuid}/package.ipa` and `staging-assets/{uuid}/asset` keys. The public bucket receives a package only after validation, review, and rights attestation; release keys include normalized bundle ID, version, and digest. Client filename never affects an object key. See [upload pipeline](upload-pipeline.md).
 
-Admin authentication, upload authorization, package parsing, publication workflows, and retention jobs are not implemented in this phase. The local SQL seed is not an admin API and must not be run against production.
+## Validation and build commands
+
+From the root, `npm run check` runs lint/typecheck/tests, Python package-validator tests, migration validation, Admin production build, and a Wrangler `--dry-run` Worker bundle. `npm run admin:e2e:local` runs the end-to-end test against in-memory D1/R2-compatible adapters and the Python validator. Neither command contacts production Cloudflare.
+
+Real direct R2 upload and external GitHub Actions validation require operator-provisioned bindings and secrets; the repo contains only local names/placeholders. No Worker deploy or account resource setup is included in development commands.
