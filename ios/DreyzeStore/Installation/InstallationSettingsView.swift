@@ -19,7 +19,7 @@ struct InstallationSettingsView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(option.availability == .available ? StorePalette.accent : Color.secondary)
                         }
-                        Text(explanation(option.availability)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Text(explanation(option)).font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         if option.capabilities.contains(.externalHandoff) {
                             Text("Handoff only · installation, inventory, and uninstall are not confirmed")
                                 .font(.caption2).foregroundStyle(.secondary)
@@ -44,8 +44,11 @@ struct InstallationSettingsView: View {
         }
     }
 
-    private func explanation(_ availability: BackendAvailability) -> String {
-        switch availability {
+    private func explanation(_ option: InstallationBackendOption) -> String {
+        if option.identifier == TrollStoreBackend().identifier {
+            return "Uses iOS Open In for the com.apple.itunes.ipa document type. TrollStore or TrollStore Lite can receive the file when installed and registered; select the destination in the system menu. Its installation prompt follows its own settings. DreyzeStore reports Handed Off, not Installed."
+        }
+        switch option.availability {
         case .available: "The system share sheet can hand the verified IPA to another app. This does not mean the app was installed."
         case .unavailable(let reason), .requiresConfiguration(let reason), .unsupported(let reason): reason
         }

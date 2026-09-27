@@ -85,10 +85,17 @@ struct DownloadFlowSheet: View {
             }
         )) {
             if let package = installationCoordinator.pendingHandoffPackage {
-                ExternalPackageShareSheet(package: package) { destination, completed, error in
-                    installationCoordinator.completeExternalHandoff(completed: completed, destination: destination, error: error)
+                if installationCoordinator.pendingHandoffBackendIdentifier == TrollStoreBackend().identifier {
+                    TrollStoreDocumentImportSheet(package: package) { destination, completed, error in
+                        installationCoordinator.completeExternalHandoff(completed: completed, destination: destination, error: error)
+                    }
+                    .ignoresSafeArea()
+                } else {
+                    ExternalPackageShareSheet(package: package) { destination, completed, error in
+                        installationCoordinator.completeExternalHandoff(completed: completed, destination: destination, error: error)
+                    }
+                    .ignoresSafeArea()
                 }
-                .ignoresSafeArea()
             }
         }
     }
@@ -174,7 +181,10 @@ struct DownloadFlowSheet: View {
                 Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
             }
         case .awaitingHandoff:
-            progressState(title: "Choose a Destination", message: "The system share sheet will hand off this verified IPA. DreyzeStore cannot confirm that the receiving app installs it.", symbol: "square.and.arrow.up") {
+            let isTrollStoreImport = installationCoordinator.pendingHandoffBackendIdentifier == TrollStoreBackend().identifier
+            progressState(title: isTrollStoreImport ? "Open in TrollStore" : "Choose a Destination", message: isTrollStoreImport
+                          ? "Choose TrollStore or TrollStore Lite in the system Open In menu. The selected app owns the install flow; its prompt follows that app’s settings."
+                          : "The system share sheet will hand off this verified IPA. DreyzeStore cannot confirm that the receiving app installs it.", symbol: "square.and.arrow.up") {
                 Button("Cancel", role: .cancel) { installationCoordinator.cancel() }.buttonStyle(.bordered)
             }
         case .handedOff(let receipt):
@@ -229,7 +239,9 @@ struct DownloadFlowSheet: View {
             }
             .padding(.horizontal, 14)
             .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            Text("Package verified. Sharing it to another app does not confirm installation.")
+            Text(selectedBackendIdentifier == TrollStoreBackend().identifier
+                 ? "The system Open In menu will pass this verified IPA to TrollStore or TrollStore Lite when installed and registered. The receiving app owns installation and its confirmation settings; DreyzeStore can only report the file handoff."
+                 : "Package verified. Sharing it to another app does not confirm installation.")
                 .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             if available.count > 1 {
                 Picker("Installation Method", selection: $selectedBackendIdentifier) {

@@ -26,16 +26,25 @@ public struct ExternalInstallerBackend: InstallationBackend {
 
 public struct TrollStoreBackend: InstallationBackend {
     public let identifier = "trollstore"
-    public let displayName = "TrollStore"
-    public let availability: BackendAvailability = .unsupported(
-        reason: "TrollStore’s documented URL handoff cannot access DreyzeStore’s app-private package file. The apple-magnifier scheme also cannot verify TrollStore is installed."
-    )
-    public let capabilities: InstallationCapabilities = []
+    public let displayName = "TrollStore / Lite Import (Open In)"
+    /// The public iOS document-import route is available. The actual recipient
+    /// is selected in the system Open In menu and is verified by its bundle ID.
+    public let availability: BackendAvailability = .available
+    public let capabilities: InstallationCapabilities = [.externalHandoff]
 
     public init() {}
 
     public func install(package: VerifiedPackage) async -> InstallationDirective {
-        .unsupported(.unsupported(availabilityReason))
+        guard package.localURL.isFileURL,
+              package.localURL.pathExtension.lowercased() == "ipa",
+              FileManager.default.isReadableFile(atPath: package.localURL.path) else {
+            return .failed(.packageRejected("The verified package is not an available local IPA file."))
+        }
+        // The coordinator revalidates the PackageStorage receipt, digest, and
+        // IPA metadata immediately before calling this backend. UIKit then
+        // hands that file to an IPA document handler; TrollStore owns the
+        // installation flow and may show its prompt according to user settings.
+        return .handoffRequested
     }
 
     public func uninstall(bundleIdentifier: String) async -> UninstallationResult {
@@ -43,20 +52,29 @@ public struct TrollStoreBackend: InstallationBackend {
     }
 
     public func queryInstalledState(bundleIdentifier: String) async -> InstalledState {
-        .unsupported(reason: "DreyzeStore cannot query TrollStore’s private installed-app inventory through a supported public API.")
+        .unsupported(reason: "The TrollStore document-import callback confirms file handoff only; it does not expose installed-app inventory to DreyzeStore.")
     }
+}
 
-    private var availabilityReason: String {
-        if case .unsupported(let reason) = availability { return reason }
-        return "TrollStore handoff is unavailable in this build."
+enum TrollStoreImportTarget {
+    static let ipaContentTypeIdentifier = "com.apple.itunes.ipa"
+    static let trollStoreBundleIdentifier = "com.opa334.TrollStore"
+    static let trollStoreLiteBundleIdentifier = "com.opa334.TrollStoreLite"
+
+    static func displayName(for bundleIdentifier: String?) -> String? {
+        switch bundleIdentifier {
+        case trollStoreBundleIdentifier: "TrollStore"
+        case trollStoreLiteBundleIdentifier: "TrollStore Lite"
+        default: nil
+        }
     }
 }
 
 public struct TrollStoreLiteBackend: InstallationBackend {
     public let identifier = "trollstore-lite"
-    public let displayName = "TrollStore Lite"
+    public let displayName = "TrollStore Lite Direct Helper"
     public let availability: BackendAvailability = .unsupported(
-        reason: "TrollStore Lite requires its jailbreak-specific privileged helper and private-framework environment; DreyzeStore does not include or invoke that helper."
+        reason: "Direct helper integration requires a jailbreak-specific privileged helper and private frameworks. If TrollStore Lite is installed, it can receive IPA files through the TrollStore Import (Open In) route; DreyzeStore does not call its helper."
     )
     public let capabilities: InstallationCapabilities = []
 
@@ -110,8 +128,8 @@ public struct DeveloperSigningBackend: InstallationBackend {
 
 public enum InstallationBackendCatalog {
     public static let standard: [any InstallationBackend] = [
-        ExternalInstallerBackend(),
         TrollStoreBackend(),
+        ExternalInstallerBackend(),
         TrollStoreLiteBackend(),
         DeveloperSigningBackend()
     ]

@@ -9,6 +9,7 @@ public final class InstallationCoordinator: ObservableObject {
     public private(set) var stateHistory: [InstallationState] = [.ready]
     @Published public private(set) var backendOptions: [InstallationBackendOption] = []
     @Published public private(set) var pendingHandoffPackage: VerifiedPackage?
+    @Published public private(set) var pendingHandoffBackendIdentifier: String?
 
     private let storage: PackageStorage
     private let validator: PackageValidator
@@ -63,6 +64,7 @@ public final class InstallationCoordinator: ObservableObject {
         activeOperationID = operationID
         transition(to: .preparingInstallation)
         pendingHandoffPackage = nil
+        pendingHandoffBackendIdentifier = nil
         pendingBackend = nil
         pendingPackageRecord = nil
 
@@ -115,6 +117,7 @@ public final class InstallationCoordinator: ObservableObject {
                     return
                 }
                 pendingHandoffPackage = verified
+                pendingHandoffBackendIdentifier = backend.identifier
                 pendingBackend = backend
                 pendingPackageRecord = record
                 transition(to: .awaitingHandoff)
@@ -135,9 +138,9 @@ public final class InstallationCoordinator: ObservableObject {
         }
     }
 
-    /// Called only by the system activity controller after a user-selected
-    /// activity finishes. `completed` means the activity ran, not that an app
-    /// was installed.
+    /// Called only after a system document/share activity reports its result.
+    /// `completed` means the file was handed to the selected app, not that the
+    /// receiving app installed it.
     public func completeExternalHandoff(completed: Bool, destination: String?, error: Error?) {
         guard case .awaitingHandoff = state,
               activeOperationID != nil,
@@ -148,6 +151,7 @@ public final class InstallationCoordinator: ObservableObject {
         defer {
             activeOperationID = nil
             pendingHandoffPackage = nil
+            pendingHandoffBackendIdentifier = nil
             pendingBackend = nil
             pendingPackageRecord = nil
         }
@@ -169,7 +173,9 @@ public final class InstallationCoordinator: ObservableObject {
         let receipt = InstallationHandoffReceipt(
             bundleIdentifier: package.bundleIdentifier,
             version: package.version,
-            method: backend.displayName,
+            method: backend.identifier == TrollStoreBackend().identifier
+                ? (TrollStoreImportTarget.displayName(for: destination) ?? "System Open In")
+                : backend.displayName,
             destination: destination,
             handedOffAt: Date()
         )
@@ -181,6 +187,7 @@ public final class InstallationCoordinator: ObservableObject {
         guard state.isActive else { return }
         activeOperationID = nil
         pendingHandoffPackage = nil
+        pendingHandoffBackendIdentifier = nil
         pendingBackend = nil
         pendingPackageRecord = nil
         transition(to: .cancelled)
@@ -189,6 +196,7 @@ public final class InstallationCoordinator: ObservableObject {
     public func reset() {
         guard !state.isActive else { return }
         pendingHandoffPackage = nil
+        pendingHandoffBackendIdentifier = nil
         pendingBackend = nil
         pendingPackageRecord = nil
         transition(to: .ready)

@@ -17,29 +17,101 @@ final class InstallationBackendTests: XCTestCase {
         if let root { try? FileManager.default.removeItem(at: root) }
     }
 
-    func testStandardBackendSelectionExposesOnlyAvailableSystemHandoff() async {
+    func testStandardBackendSelectionPrioritizesTrollStoreDocumentImportWithoutClaimingInstallation() async {
         let coordinator = await makeCoordinator(backends: InstallationBackendCatalog.standard)
         await coordinator.refreshBackendOptions()
 
         let available = await MainActor.run { coordinator.availableBackendOptions }
-        XCTAssertEqual(available.map(\.identifier), ["external-handoff"])
+        XCTAssertEqual(available.map(\.identifier), ["trollstore", "external-handoff"])
         let automaticBackend = await MainActor.run { coordinator.automaticBackendIdentifier() }
-        XCTAssertEqual(automaticBackend, "external-handoff")
-        XCTAssertFalse(available[0].capabilities.contains(.confirmedInstall))
+        XCTAssertEqual(automaticBackend, "trollstore")
+        XCTAssertFalse(available.contains { $0.capabilities.contains(.confirmedInstall) })
     }
 
     func testAvailabilityStatesAreExplicitForTrollStoreSigningAndLite() {
         let trollStore = TrollStoreBackend()
         let lite = TrollStoreLiteBackend()
         let signing = DeveloperSigningBackend()
-        guard case .unsupported(let trollReason) = trollStore.availability,
+        guard case .available = trollStore.availability,
               case .unsupported(let liteReason) = lite.availability,
               case .requiresConfiguration(let signingReason) = signing.availability else {
-            return XCTFail("Expected unsupported or configuration-required backend states.")
+            return XCTFail("Expected an available document-import route and explicit Lite/signing limitations.")
         }
-        XCTAssertTrue(trollReason.contains("app-private package file"))
         XCTAssertTrue(liteReason.contains("privileged helper"))
         XCTAssertTrue(signingReason.contains("does not collect or upload Apple credentials"))
+    }
+
+    func testTrollStoreBackendRequestsDocumentHandoffOnlyForVerifiedIPA() async throws {
+        let package = try makeVerifiedPackage()
+        let result = await TrollStoreBackend().install(package: package)
+        guard case .handoffRequested = result else {
+            return XCTFail("A verified IPA should enter the system document handoff, not report an installation.")
+        }
+        XCTAssertTrue(TrollStoreBackend().capabilities.contains(.externalHandoff))
+        XCTAssertFalse(TrollStoreBackend().capabilities.contains(.confirmedInstall))
+        XCTAssertFalse(TrollStoreBackend().capabilities.contains(.inventory))
+        XCTAssertFalse(TrollStoreBackend().capabilities.contains(.uninstall))
+    }
+
+    func testTrollStoreImportRecognizesOnlyUpstreamDocumentHandlerBundleIdentifiers() {
+        XCTAssertEqual(TrollStoreImportTarget.displayName(for: "com.opa334.TrollStore"), "TrollStore")
+        XCTAssertEqual(TrollStoreImportTarget.displayName(for: "com.opa334.TrollStoreLite"), "TrollStore Lite")
+        XCTAssertNil(TrollStoreImportTarget.displayName(for: "com.example.otherIPAHandler"))
+        XCTAssertEqual(TrollStoreImportTarget.ipaContentTypeIdentifier, "com.apple.itunes.ipa")
+    }
+
+    func testTrollStoreImportCoordinatorRecordsHandoffNotInstalled() async throws {
+        let package = try makeVerifiedPackage()
+        let defaults = UserDefaults(suiteName: "DreyzeStoreTrollStoreImport-\(UUID().uuidString)")!
+        let history = await MainActor.run { InstallationHistoryStore(defaults: defaults) }
+        let coordinator = await MainActor.run {
+            InstallationCoordinator(storage: storage, backends: [TrollStoreBackend()], historyStore: history)
+        }
+
+        await coordinator.beginInstall(package: package, backendIdentifier: TrollStoreBackend().identifier)
+        let pendingState = await MainActor.run { coordinator.state }
+        let pendingBackend = await MainActor.run { coordinator.pendingHandoffBackendIdentifier }
+        XCTAssertEqual(pendingState, .awaitingHandoff)
+        XCTAssertEqual(pendingBackend, "trollstore")
+        await MainActor.run {
+            coordinator.completeExternalHandoff(
+                completed: true,
+                destination: TrollStoreImportTarget.trollStoreBundleIdentifier,
+                error: nil
+            )
+        }
+
+        guard case .handedOff(let receipt) = await MainActor.run(body: { coordinator.state }) else {
+            return XCTFail("The documented document import must be recorded as a handoff only.")
+        }
+        XCTAssertEqual(receipt.method, "TrollStore")
+        XCTAssertEqual(receipt.destination, TrollStoreImportTarget.trollStoreBundleIdentifier)
+        let transitions = await MainActor.run { coordinator.stateHistory }
+        XCTAssertFalse(transitions.contains { if case .installed = $0 { true } else { false } })
+    }
+
+    func testTrollStoreLiteImportIsRecordedAsHandoffNotInstall() async throws {
+        let package = try makeVerifiedPackage()
+        let coordinator = await makeCoordinator(backends: [TrollStoreBackend()])
+
+        await coordinator.beginInstall(package: package, backendIdentifier: TrollStoreBackend().identifier)
+        await MainActor.run {
+            coordinator.completeExternalHandoff(
+                completed: true,
+                destination: TrollStoreImportTarget.trollStoreLiteBundleIdentifier,
+                error: nil
+            )
+        }
+
+        let result = await MainActor.run { coordinator.state }
+        guard case .handedOff(let receipt) = result else {
+            return XCTFail("TrollStore Lite receiving the verified IPA must remain a handoff result.")
+        }
+        XCTAssertEqual(receipt.method, "TrollStore Lite")
+        let transitions = await MainActor.run { coordinator.stateHistory }
+        XCTAssertFalse(transitions.contains {
+            if case .installed = $0 { true } else { false }
+        })
     }
 
     func testUnavailableConfiguredAndUnsupportedBackendsCannotRunInstall() async throws {

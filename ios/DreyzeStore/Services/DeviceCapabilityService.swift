@@ -33,9 +33,13 @@ public struct DeviceCapabilityService: Sendable {
             switch backend.availability {
             case .available:
                 state = .available
-                explanation = backend.capabilities.contains(.externalHandoff)
-                    ? "Can hand a verified package to the system share sheet; installation is not confirmed."
-                    : "Available for this device."
+                if backend.identifier == TrollStoreBackend().identifier {
+                    explanation = "Can hand a verified IPA to TrollStore or TrollStore Lite through Open In when registered. The receiving app owns installation and any confirmation prompt; DreyzeStore cannot confirm the result."
+                } else if backend.capabilities.contains(.externalHandoff) {
+                    explanation = "Can hand a verified package to the system share sheet; installation is not confirmed."
+                } else {
+                    explanation = "Available for this device."
+                }
             case .unavailable(let reason):
                 state = .unavailable
                 explanation = reason

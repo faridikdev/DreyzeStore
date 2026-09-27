@@ -48,6 +48,7 @@
 		000000000000000000000229 /* ExternalPackageShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000130 /* ExternalPackageShareSheet.swift */; };
 		00000000000000000000022A /* InstallationSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000131 /* InstallationSettingsView.swift */; };
 		00000000000000000000022B /* InstallationBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000132 /* InstallationBackendTests.swift */; };
+		00000000000000000000022C /* TrollStoreDocumentImportSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000133 /* TrollStoreDocumentImportSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +103,7 @@
 		000000000000000000000130 /* ExternalPackageShareSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalPackageShareSheet.swift; sourceTree = "<group>"; };
 		000000000000000000000131 /* InstallationSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationSettingsView.swift; sourceTree = "<group>"; };
 		000000000000000000000132 /* InstallationBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationBackendTests.swift; sourceTree = "<group>"; };
+		000000000000000000000133 /* TrollStoreDocumentImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrollStoreDocumentImportSheet.swift; sourceTree = "<group>"; };
 		000000000000000000000115 /* DreyzeStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000116 /* DreyzeStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreyzeStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -143,7 +145,7 @@
 		000000000000000000000016 /* Repositories */ = {isa = PBXGroup; children = (000000000000000000000109, 000000000000000000000117,); path = Repositories; sourceTree = "<group>"; };
 		000000000000000000000017 /* Persistence */ = {isa = PBXGroup; children = (00000000000000000000010A,); path = Persistence; sourceTree = "<group>"; };
 		000000000000000000000018 /* Security */ = {isa = PBXGroup; children = (00000000000000000000010B, 00000000000000000000012A,); path = Security; sourceTree = "<group>"; };
-		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C, 00000000000000000000012D, 00000000000000000000012E, 00000000000000000000012F, 000000000000000000000130, 000000000000000000000131,); path = Installation; sourceTree = "<group>"; };
+		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C, 00000000000000000000012D, 00000000000000000000012E, 00000000000000000000012F, 000000000000000000000130, 000000000000000000000131, 000000000000000000000133,); path = Installation; sourceTree = "<group>"; };
 		000000000000000000000035 /* Downloads */ = {isa = PBXGroup; children = (000000000000000000000126, 000000000000000000000127, 000000000000000000000128, 000000000000000000000129, 00000000000000000000012B,); path = Downloads; sourceTree = "<group>"; };
 		00000000000000000000001A /* Utilities */ = {isa = PBXGroup; children = (00000000000000000000010D,); path = Utilities; sourceTree = "<group>"; };
 		00000000000000000000001B /* Components */ = {isa = PBXGroup; children = (000000000000000000000119,); path = Components; sourceTree = "<group>"; };
@@ -252,6 +254,7 @@
 				000000000000000000000228,
 				000000000000000000000229,
 				00000000000000000000022A,
+				00000000000000000000022C,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
