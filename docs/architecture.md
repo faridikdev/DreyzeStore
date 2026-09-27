@@ -1,6 +1,6 @@
 # DreyzeStore architecture
 
-**Status:** Phase 1 foundation. The repository now contains the native app shell, typed Worker health endpoint, schema, local migrations, admin shell, and CI. No cloud resources have been created. This document describes the target architecture; most product routes and workflows remain future-phase work.
+**Status:** Phase 2 backend complete. The repository includes the iOS shell, read-only catalog API on the local Cloudflare Worker stack, repository-v1 generation/validation, local D1 migrations and seed, admin shell, and CI. No cloud resources have been created. This document records both the current implementation and the longer-term target; anything marked future-phase is not a live feature.
 
 ## Goals and platform boundary
 
@@ -23,6 +23,8 @@ docs/                  Architecture, operations, security, and format docs
 The admin app is a static SPA because it has no public pages that need server-side rendering. The API remains the only authority for accounts, permissions, metadata, and release state. This avoids adding a second application server for the admin panel.
 
 ## System shape
+
+This is the target system shape. In Phase 2, only the public catalog metadata API and local D1 seed are implemented; admin auth, package transfer/validation, installation, and production storage are later work.
 
 ```mermaid
 flowchart LR
@@ -79,16 +81,18 @@ Production hostnames are `api.<owned-domain>`, `admin.<owned-domain>`, and `cdn.
 
 ## REST API contract
 
-Base path: `/api/v1`. JSON uses UTF-8 and camelCase fields. IDs are opaque and stable. Public APIs return only published records and never expose R2 object keys, admin fields, or storage credentials.
+Base path: `/api/v1`. JSON uses UTF-8 and camelCase fields. IDs are stable identifiers. Public APIs return only published records and never expose R2 object-key fields, admin fields, or storage credentials. The implemented API reference, request examples, response examples, limits, caching, and errors are in [api.md](api.md).
 
 Success envelope:
 
 ```json
 {
   "data": {},
-  "meta": { "requestId": "req_...", "nextCursor": null }
+  "meta": { "page": 1, "pageSize": 24, "hasMore": false }
 }
 ```
+
+Successful responses include `X-Request-Id` in the response headers. Errors include the request ID in the error object.
 
 Error envelope:
 
@@ -104,25 +108,19 @@ Error envelope:
 
 Do not include stack traces, passwords, cookies, presigned URLs, or raw tokens in errors. `details` may carry field-level validation messages. Cacheable public responses use ETag/conditional requests; authenticated admin responses use `Cache-Control: no-store`.
 
-| Route | Contract |
+| Route | Phase 2 contract |
 |---|---|
-| `GET /apps?category=&repository=&sort=&cursor=&limit=` | Published app page. `sort` is `popular`, `newest`, or `updated`; opaque cursor, default page size 24, maximum 100. |
-| `GET /apps/:id` | App detail including developer, repository, current release, screenshots, and release summary. |
-| `GET /apps/:id/versions?cursor=&limit=` | Published release history, newest semantic version first. |
-| `GET /categories` | Stable category IDs, display names, and published counts. |
-| `GET /featured` | Editorial sections and referenced app IDs; no presentation data is hardcoded in the client. |
-| `GET /search?q=&cursor=&limit=` | Server search across app name, developer, bundle ID, description, and category. Query length is bounded. |
-| `GET /updates?cursor=&limit=` | Latest published releases, suitable for local comparison with a list the client already knows. It does not discover installed apps. |
-| `GET /repository` | Official repository manifest, validated against repository format v1. |
-| `GET /apps/:id/versions/:versionId/download` | Published-package redirect or stream with correct content type, length, ETag, and byte-range support where the origin permits it. |
-| `POST /admin/session`, `DELETE /admin/session` | OAuth callback/session lifecycle; session cookie is server-owned. |
-| `POST /admin/apps`, `PATCH /admin/apps/:id`, `DELETE /admin/apps/:id` | Create/edit/unpublish an app. Delete is a soft delete; release objects and audit history are not erased implicitly. |
-| `POST /admin/upload`, `POST /admin/upload/:id/complete` | Create an upload ticket and signal upload completion for asynchronous validation. |
-| `POST /admin/apps/:id/releases` | Create a release only from a validated upload ID; publish state requires explicit admin action. |
-| `POST /admin/apps/:id/versions/:versionId/publish` | Publish a reviewed, validated draft release. |
-| `POST /admin/featured` | Replace or update ordered editorial sections after validating app references. |
+| `GET /apps?category=&repository=&sort=&page=&limit=&cursor=` | Published app summaries; sort is `name`, `updated`, or `newest`; page up to 1000 and page size up to 100, or a filter-bound cursor. |
+| `GET /apps/:id` | Published app detail, developer, category, latest published stable release (or newest available release), screenshots, and compatibility metadata. |
+| `GET /apps/:id/versions` | Published release history, newest publication timestamp first. |
+| `GET /categories` | Canonical categories and counts of published apps. |
+| `GET /featured` | Ordered configured sections with published apps only. |
+| `GET /search?q=&category=&repository=&sort=&page=&limit=&cursor=` | D1 FTS search across name, developer, bundle ID, description, and category. |
+| `GET /updates?apps=` | Up to 25 unique installed app/version pairs; returns newer published stable releases by semantic precedence. Does not discover installed apps. |
+| `GET /repository` | Public repository-v1 document generated from published rows and checked by the shared validator. |
+| `GET /health` | D1 readiness without exposing diagnostics. |
 
-`POST`, `PATCH`, and `DELETE` require an authenticated role, exact allowed `Origin`, CSRF token, and request-size limits. Statuses include `200`, `201`, `202`, `204`, `400`, `401`, `403`, `404`, `409`, `413`, `415`, `422`, `429`, and `500` as appropriate. All API handlers validate path/query/body input before data access.
+All Phase 2 routes are read-only. Admin auth/CRUD, uploads, downloads, and package streaming are not implemented. Query/path input is validated before D1 access; values use prepared statements; public responses use explicit DTO projections; shared errors include a request ID. Public catalog responses use bounded `ETag` caching, and updates responses are `no-store` because the request contains installed-app inventory. CORS reflects only exact configured origins.
 
 Version comparison uses semantic components and prerelease ordering, never string comparison: `1.0 < 1.1`, `1.9 < 1.10`, and `2.0-beta < 2.0`. Preserve the original version/build strings for display. For legacy two-component versions, compare the missing patch component as zero. A release's bundle identifier must match the app record and its `Info.plist`.
 
@@ -134,12 +132,12 @@ Initial normalized tables and constraints:
 |---|---|
 | `developers` | Display name and optional public links; unique stable ID. |
 | `categories` | Stable slug and localized display name; unique slug. |
-| `apps` | UUID, bundle ID, developer/category foreign keys, text/media fields, publication/deletion timestamps; indexes on `published`, category, developer, and updated time. |
-| `versions` | App FK, version/build, minimum OS, immutable R2 object key, SHA-256, byte size, release notes, validation/publication state, uploader/time, distribution-rights attestation and evidence URL; unique `(app_id, version, build)` and index `(app_id, published_at)`. |
-| `screenshots` | App FK, R2 asset key/URL, order, accessibility caption; index `(app_id, ordinal)`. |
-| `featured` | Section key, app FK, rank, date window; index `(section_key, rank)`. |
-| `app_daily_downloads` | Daily aggregate of download-link requests for popularity sorting; index `(app_id, day)`. This counts requested downloads, not completed installations. |
-| `repositories` | Identifier, manifest URL, trust/health metadata and added/updated times; unique identifier and URL hash. |
+| `apps` | Stable ID, unique bundle ID, developer/category/repository foreign keys, bounded text/media references, publication/deletion timestamps; catalog name/category/source/date indexes. |
+| `versions` | App FK, version/build, minimum OS, R2 object reference, SHA-256, byte size, release notes, channel and publication timestamp; unique `(app_id, version, build)` and published-release index. |
+| `screenshots` | App FK, R2 asset reference, order and accessibility caption; index `(app_id, ordinal)`. |
+| `featured` | Section key, app FK, rank and optional date window; ordered index and unique app-per-section constraint. |
+| `app_daily_downloads` | Reserved daily download-request aggregate; not used for catalog sorting in Phase 2. |
+| `repositories` | Identifier, manifest URL, trust level, description/icon reference and timestamps; unique identifier/URL and a single official repository. |
 | `admin_users` | External identity subject, role, enabled state, creation/last-auth times; unique `(provider, subject)`. No plaintext password field. |
 | `admin_sessions` | Hash of random opaque session token, user FK, CSRF-token hash, expiry/revocation; unique token hash. |
 | `audit_logs` | Actor FK/snapshot, action, resource type/id, timestamp, request ID, pseudonymous IP metadata; indexed by time and resource. Never stores auth secrets. |
@@ -171,7 +169,7 @@ Utilities/            semantic version comparison, formatting, accessibility/hap
 
 The current Xcode target is an iOS 16.0 SwiftUI app shell. Its five tab screens explicitly state that catalog features are not yet available; no sample app listing is bundled. The code has typed models, an API client, a repository contract, and a semantic-version utility. Download and package verification implementations are deferred to later phases.
 
-The backend currently implements only `GET /api/v1/health`. API response DTOs are in `shared/src/contracts.ts`; unimplemented product routes intentionally return `404`. The admin page only performs a real health check and has no login or write controls until their implementation phases.
+The backend implements the read-only catalog API listed above. API response DTOs are in `shared/src/contracts.ts`; endpoint details are in [api.md](api.md). The admin page still performs a health check only and has no login or write controls until its later phase.
 
 The tab shell is Today, Apps, Search, Updates, and Library. Features use lazy lists, task cancellation, Dynamic Type, VoiceOver labels, Reduce Motion, dark mode, explicit loading/empty/offline/error states, and no color-only status meaning.
 
@@ -201,4 +199,4 @@ Upstream references: [TrollStore license](https://github.com/opa334/TrollStore/b
 
 ## Phase gates
 
-Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation without production app data or cloud provisioning. Later phases can implement catalog API/UI, validation, and authenticated publishing locally. Production DNS, Cloudflare accounts/resources/secrets, paid capacity, and app-distribution entitlements remain explicit deployment decisions after review.
+Phase 1 established the repository layout, project shells, shared schemas, local migrations, Worker health route, CI, and documentation. Phase 2 adds the public read-only API, D1 search/index constraints, repository generation, and fictional local-only metadata. Phase 3 will connect the iOS catalog UI. Admin management, package validation/download, installation, and production deployment remain later explicit phase gates. No production DNS, Cloudflare resources, or secrets have been created.

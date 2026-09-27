@@ -1,6 +1,6 @@
 # Repository format v1
 
-**Status:** Phase 1 contract baseline; the normative schema is checked in at `shared/schemas/repository-v1.schema.json`.
+**Status:** Phase 2 contract implemented; the normative schema is checked in at `shared/schemas/repository-v1.schema.json` and the Worker validates generated repository responses with the shared runtime validator.
 
 ## Purpose and versioning
 

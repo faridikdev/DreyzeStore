@@ -2,7 +2,7 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source foundation for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **The current Phase 1 code is project infrastructure, not a complete store:** catalog APIs, admin login and editing, downloads, IPA validation, installation adapters, and production deployment have not been implemented.
+DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 2 implements the public read-only catalog API and local development seed; the full store is not complete:** admin login and editing, package upload/download, IPA validation, real installation adapters, and production deployment have not been implemented.
 
 An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
 
@@ -14,7 +14,7 @@ An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enume
 - `shared`: repository JSON Schema v1 and shared API DTOs.
 - `.github/workflows/ci.yml`: Linux backend/admin checks and macOS simulator build/test.
 
-See [architecture](docs/architecture.md), [backend development](docs/backend.md), [repository format](docs/repository-format.md), [installation boundary](docs/installation.md), [security](docs/security.md), [licenses](docs/licenses.md), [CI boundary](docs/ci.md), and [deployment boundary](docs/deployment.md).
+See [architecture](docs/architecture.md), [backend development](docs/backend.md), [API reference](docs/api.md), [repository format](docs/repository-format.md), [installation boundary](docs/installation.md), [security](docs/security.md), [licenses](docs/licenses.md), [CI boundary](docs/ci.md), and [deployment boundary](docs/deployment.md).
 
 ## Screenshots
 
@@ -46,10 +46,11 @@ The configured API URL ends in the reserved `.invalid` domain until a future env
 ```sh
 npm ci
 npm run db:migrate:local
+npm run db:seed:local
 npm run dev:api
 ```
 
-Only `GET /api/v1/health` is implemented in this phase. It checks the local D1 binding; catalog paths intentionally return `404` until their API phase. Wrangler uses local D1 and R2 emulation. Do not pass remote flags during local development.
+The Worker serves the public catalog API under `/api/v1/`, including app listing/details/versions, categories, featured sections, search, updates, repository-v1 generation, and health. API requests and response examples are in [docs/api.md](docs/api.md). The local seed contains fictional metadata and placeholder `.invalid` asset URLs only; no IPA files are included. Wrangler uses local D1 and R2 emulation. With the Worker running, `npm run smoke:api:local` exercises it against local D1 and validates the repository response. Do not pass remote flags during local development.
 
 ## Running the admin panel
 
@@ -72,7 +73,7 @@ Repository v1 is JSON Schema Draft 2020-12 at [shared/schemas/repository-v1.sche
 
 ## Installation backends
 
-The app defines `InstallationBackend` only. There are no TrollStore, TrollStore Lite, signing, marketplace, or external installer adapters in Phase 1; no exploit code is included. See [installation.md](docs/installation.md) for truthful status and platform constraints.
+The app defines `InstallationBackend` only. There are no TrollStore, TrollStore Lite, signing, marketplace, or external installer adapters yet; no exploit code is included. See [installation.md](docs/installation.md) for the current status and platform constraints.
 
 ## Security
 

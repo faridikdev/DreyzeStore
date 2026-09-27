@@ -1,6 +1,6 @@
 # Installation architecture
 
-**Status:** Phase 1 foundation. DreyzeStore will not ship a backend that reports success without a verifiable installation result. `InstallationBackend` is an interface only; no concrete backend is registered or implemented.
+**Status:** Phase 2. DreyzeStore will not ship a backend that reports success without a verifiable installation result. `InstallationBackend` is an interface only; no concrete backend is registered or implemented.
 
 In Phase 1, `VerifiedPackage` has an internal initializer so future installation code can require a value produced by verification. The verifier is deferred to Phase 4. No TrollStore or TrollStore Lite source has been downloaded or copied into this repository. The current tab shell exposes no install action.
 

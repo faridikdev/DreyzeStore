@@ -1,6 +1,6 @@
 # Security architecture
 
-**Status:** Phase 0 baseline for implementation. It is not a certification or claim that every future integration is secure.
+**Status:** Security design baseline. Phase 2 applies these controls to the public catalog API (bounded validation, prepared D1 queries, allowlisted DTOs, request IDs, non-wildcard CORS, and safe caching). Admin and package controls below describe future implementation requirements; this document is not a certification that those later integrations are secure.
 
 ## Assets and trust boundaries
 

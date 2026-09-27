@@ -1,34 +1,34 @@
 # Backend development
 
-The API is a Cloudflare Worker written in TypeScript with Hono. It uses D1 for relational metadata and separate R2 bindings for public assets and private upload staging. The checked-in Wrangler configuration is local-development configuration only: its D1 identifier is a local placeholder, and bucket names are not provisioned by this repository.
+The public API is a TypeScript Cloudflare Worker using Hono. Routes call catalog services; services validate stored data and map public DTOs; repositories own all D1 SQL. D1 stores catalog metadata. R2 bindings are configured for future public assets and private staging, but this phase does not upload, retrieve, or stream package bytes.
 
 ## Local commands
 
 From the repository root:
 
 ```sh
-npm install
+npm ci
 npm run db:migrate:local
+npm run db:seed:local
 npm run dev:api
 ```
 
-The local Worker listens on `http://localhost:8787`. The only implemented endpoint in this foundation is `GET /api/v1/health`; it returns ready only when the D1 binding can answer a query. Store and admin endpoints are intentionally not represented as working routes yet.
+Wrangler serves `http://localhost:8787`. The development seed contains only fictional metadata and `.invalid` asset/package URLs; it does not contain IPA files or create R2 objects. The seed is intended for the local database only.
 
-To create the local D1 database before migrations, run:
+`GET /api/v1/health` checks the local D1 binding. The public catalog endpoints and their contracts are documented in [api.md](api.md). Do not add `--remote` to local commands. The default build is a Worker dry-run and does not deploy or provision resources.
 
-```sh
-npm run db:create:local
-npm run db:migrate:local
-```
+## API and data layers
 
-`db:create:local` only initializes Wrangler's local state. Do not add `--remote` to local development commands. No command in the normal build or CI workflow provisions cloud resources or performs a deployment.
+The API is versioned under `/api/v1/`. Routes validate query and path inputs and return a common `{ "error": { "code", "message", "requestId" } }` shape for failures. Public success responses use `{ "data": ..., "meta": ... }`, except `/repository`, which is the repository-v1 document itself. Catalog reads only include published, non-deleted apps with at least one published release. Release and asset metadata is validated before it leaves the Worker.
 
-## API contract baseline
+`backend/src/routes/` contains HTTP handlers, `services/` owns public DTO construction and domain rules, `repositories/` owns D1 queries, and `db/` contains binding utilities. Prepared statements are used for data values; sorting clauses are selected from fixed allowlists. Pagination is bounded to 100 items and page numbers to 1000. Search uses the local D1 FTS5 index and tokenized, bound query expressions.
 
-Shared TypeScript DTOs live in `shared/src/contracts.ts`. The public response envelope is `{ "data": ..., "meta": ... }`, and errors use `{ "error": { "code", "message", "requestId" } }`. Unimplemented endpoints return `404`; this prevents callers from mistaking planned routes for functioning services. The normative repository response is defined by `shared/schemas/repository-v1.schema.json`.
+The repository response is generated from published rows and validated with the shared JSON Schema v1 validator before it is returned. It exposes public HTTPS URLs derived from asset references, not D1 columns such as `ipa_object_key` or admin/audit data.
 
 ## D1 and R2
 
-`backend/migrations/` contains ordered SQL migrations. Apply them locally with Wrangler. Package bytes and image objects are represented by R2 object keys in metadata, never stored in D1 or Git. The local `PUBLIC_ASSETS` and `STAGING_ASSETS` bindings are isolated from production and remote buckets.
+`backend/migrations/` contains ordered SQL migrations. `0001_initial_schema.sql` is preserved; `0002_public_catalog.sql` adds public-catalog indexes, bounded publication constraints, and the FTS5 index/triggers. `python scripts/validate_migrations.py` executes the migrations against SQLite, checks indexes/foreign keys and constraints, then verifies the seed and search index.
 
-Admin authentication, upload authorization, package parsing, publication, and retention jobs are not implemented in this foundation. They must be completed before any admin endpoint can mutate data or any public release is served.
+The checked-in Wrangler configuration is local-development configuration. Its D1 identifier is a placeholder and R2 bucket names configure only local bindings; no production D1/R2 resources, DNS, or secrets are created. `PUBLIC_ASSETS_BASE_URL` must be an HTTPS public asset host in a future deployment. Package object keys are only metadata references at this stage; downloads and package validation are later phases.
+
+Admin authentication, upload authorization, package parsing, publication workflows, and retention jobs are not implemented in this phase. The local SQL seed is not an admin API and must not be run against production.

@@ -1,6 +1,6 @@
 # Deployment boundaries
 
-Phase 1 does not deploy DreyzeStore, create a Cloudflare account or resource, change DNS, add a domain, or set secrets. `backend/wrangler.jsonc` is a local Worker configuration with a placeholder D1 identifier and local-only R2 bucket names. The admin static build is an artifact only; it is not uploaded anywhere.
+Phases 1 and 2 do not deploy DreyzeStore, create a Cloudflare account or resource, change DNS, add a domain, or set secrets. `backend/wrangler.jsonc` is a local Worker configuration with a placeholder D1 identifier and local-only R2 bucket names. The admin static build is an artifact only; it is not uploaded anywhere.
 
 ## Before a future deployment
 
