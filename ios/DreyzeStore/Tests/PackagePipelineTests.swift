@@ -163,6 +163,24 @@ final class PackagePipelineTests: XCTestCase {
         try assertArchiveRejected(makeArchive([("Other/Example.app/Info.plist", try infoPlist()), ("Other/Example.app/Example", Data("exec".utf8))]), expected: .missingPayload)
     }
 
+    func testPayloadRootMustBeADirectory() throws {
+        let bytes = try makeArchive([
+            ("Payload", Data("not a directory".utf8)),
+            ("Payload/DreyzeSample.app/Info.plist", try infoPlist()),
+            ("Payload/DreyzeSample.app/DreyzeSample", Data("exec".utf8))
+        ])
+        try assertArchiveRejected(bytes, expected: .unsafeArchive)
+    }
+
+    func testAppBundleRootMustBeADirectory() throws {
+        let bytes = try makeArchive([
+            ("Payload/DreyzeSample.app", Data("not a directory".utf8)),
+            ("Payload/DreyzeSample.app/Info.plist", try infoPlist()),
+            ("Payload/DreyzeSample.app/DreyzeSample", Data("exec".utf8))
+        ])
+        try assertArchiveRejected(bytes, expected: .unsafeArchive)
+    }
+
     func testMissingInfoPlistIsRejected() throws {
         try assertArchiveRejected(makeArchive([("Payload/Example.app/Example", Data("exec".utf8))]), expected: .missingInfoPlist)
     }

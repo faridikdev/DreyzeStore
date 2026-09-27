@@ -206,14 +206,31 @@ struct PackageValidator: Sendable {
             return "Payload/\(components[1])"
         })
         guard appRoots.count == 1, let appRoot = appRoots.first else { throw PackageVerificationError.missingApplicationBundle }
+        let appRootName = appRoot.components(separatedBy: "/")[1]
 
         for entry in entries {
             let components = Self.pathComponents(entry.path)
             guard let top = components.first else { throw PackageVerificationError.unsafeArchive }
             if top == "Payload" {
-                guard components.count == 1 || (components.count >= 2 && components[1] == appRoot.components(separatedBy: "/")[1]) else {
+                guard components.count == 1 || (components.count >= 2 && components[1] == appRootName) else {
                     throw PackageVerificationError.unsafeArchive
                 }
+                if components.count == 1 || components.count == 2 {
+                    guard entry.type == .directory else { throw PackageVerificationError.unsafeArchive }
+                }
+            }
+        }
+
+        let nonDirectoryPaths = Set(entries.compactMap { entry -> String? in
+            guard entry.type != .directory else { return nil }
+            return Self.normalizedPathKey(entry.path)
+        })
+        for entry in entries {
+            let components = Self.pathComponents(Self.normalizedPathKey(entry.path))
+            guard components.count > 1 else { continue }
+            for depth in 1..<components.count {
+                let ancestor = components.prefix(depth).joined(separator: "/")
+                guard !nonDirectoryPaths.contains(ancestor) else { throw PackageVerificationError.unsafeArchive }
             }
         }
 
@@ -322,6 +339,11 @@ struct PackageValidator: Sendable {
 
     private static func pathComponents(_ path: String) -> [String] {
         path.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+    }
+
+    private static func normalizedPathKey(_ path: String) -> String {
+        path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
     }
 
     private static func isSafeLeaf(_ value: String) -> Bool {
