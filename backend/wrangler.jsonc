@@ -5,7 +5,8 @@
   "compatibility_date": "2026-09-27",
   "workers_dev": true,
   "vars": {
-    "ADMIN_ORIGINS": "http://localhost:5173"
+    "ADMIN_ORIGINS": "http://localhost:5173",
+    "PUBLIC_ASSETS_BASE_URL": "https://assets.dreyzestore.invalid"
   },
   "d1_databases": [
     {

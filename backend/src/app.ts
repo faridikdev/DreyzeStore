@@ -2,17 +2,22 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { WorkerEnvironment } from "./env.js";
 import { healthRoutes } from "./routes/health.js";
+import { catalogRoutes } from "./routes/catalog.js";
 import { requestContext } from "./middleware/requestContext.js";
 import { securityHeaders } from "./middleware/securityHeaders.js";
+import { ApiError, apiErrorResponse, type ApiContext, type ApiVariables } from "./errors.js";
 
-export const app = new Hono<{
-  Bindings: WorkerEnvironment;
-  Variables: { requestId: string };
-}>();
+type AppEnvironment = { Bindings: WorkerEnvironment; Variables: ApiVariables };
+
+export const app = new Hono<AppEnvironment>();
 
 app.use("*", requestContext);
 app.use("*", securityHeaders);
 app.use("/api/*", async (context, next) => {
+  if (context.req.url.length > 8192) {
+    throw new ApiError(414, "uri_too_long", "The request URL is too long.");
+  }
+
   const origins = (context.env.ADMIN_ORIGINS ?? "")
     .split(",")
     .map((origin) => origin.trim())
@@ -21,38 +26,32 @@ app.use("/api/*", async (context, next) => {
   return cors({
     origin: (origin) => (origins.includes(origin) ? origin : null),
     allowMethods: ["GET", "OPTIONS"],
-    allowHeaders: ["Content-Type", "X-Request-Id"],
+    allowHeaders: ["Content-Type", "If-None-Match"],
+    exposeHeaders: ["ETag", "X-Request-Id"],
     maxAge: 600,
   })(context, next);
 });
 
 app.route("/api/v1/health", healthRoutes);
+const v1Routes = new Hono<{ Bindings: WorkerEnvironment; Variables: ApiVariables }>();
+catalogRoutes(v1Routes);
+app.route("/api/v1", v1Routes);
 
-app.notFound((context) =>
-  context.json(
-    {
-      error: {
-        code: "not_found",
-        message: "The requested resource was not found.",
-        requestId: context.get("requestId"),
-      },
-    },
-    404,
-  ),
-);
+app.notFound((context) => apiErrorResponse(context as ApiContext, new ApiError(
+  404,
+  "not_found",
+  "The requested resource was not found.",
+)));
 
 app.onError((error, context) => {
-  // Keep internal error details out of public responses. Structured logging is
-  // intentionally deferred until request redaction and retention are defined.
-  void error;
-  return context.json(
-    {
-      error: {
-        code: "internal_error",
-        message: "The request could not be completed.",
-        requestId: context.get("requestId"),
-      },
-    },
+  if (error instanceof ApiError) return apiErrorResponse(context as ApiContext, error);
+  if (error instanceof URIError) {
+    return apiErrorResponse(context as ApiContext, new ApiError(400, "invalid_path", "The request path is invalid."));
+  }
+  // Internal D1/Worker diagnostics stay out of the public response.
+  return apiErrorResponse(context as ApiContext, new ApiError(
     500,
-  );
+    "internal_error",
+    "The request could not be completed.",
+  ));
 });

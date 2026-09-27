@@ -1,3 +1,3 @@
 # Schema boundary
 
-The versioned repository schema and DTO contracts live in `shared/`. Backend handlers must validate repository and request payloads against those shared contracts before use; no independent permissive schema is defined here.
+The versioned repository schema and DTO contracts live in `shared/`. The Worker validates every generated repository-v1 document with the shared validator. Query/path inputs are validated in route parsers; no separate permissive repository schema is defined in this folder.
