@@ -25,7 +25,9 @@ The development seed contains fictional metadata; it does not include or distrib
 - Catalog JSON is cached for at most seven days, with an 8 MB total limit and 3 MB per entry. Failed network reads can use a still-valid snapshot; server and decoding failures do not fall back silently.
 - Remote images use `URLCache` (24 MB memory / 96 MB disk), a 12 MB response limit, cancellable view tasks, and ImageIO thumbnails capped at 512 px for icons and 1,500 px for screenshots.
 - Updates remains empty until a trustworthy installed-app inventory exists. The typed endpoint client is present but no inventory is fabricated or sent.
-- GET presents an informational notice. It does not download, verify, hand off, or install a package.
+- GET opens a confirmation sheet, downloads the HTTPS release into a UUID-named managed temporary file, verifies SHA-256, inspects IPA structure and metadata, and retains only a verified package. The current client does not install or hand off packages.
+- Library → Downloaded lists verified local packages and supports details/deletion. Settings → Storage displays package/cache/temporary usage and clears only DreyzeStore-managed files.
+- Background transfers use a stable background URLSession identifier and UIApplicationDelegate restoration hooks. The OS controls scheduling; retry starts a fresh transfer.
 
 ## Tests
 
@@ -39,4 +41,4 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-The GitHub Actions `iOS simulator build and tests` job runs the same scheme on a macOS simulator. A successful run is required for each Phase 3 commit; an older run does not validate later changes.
+The GitHub Actions `iOS simulator build and tests` job runs the same scheme on a macOS simulator. Phase 4 adds generated ZIP fixtures for validator security cases and a local loopback HTTP integration test; an older run does not validate later changes.

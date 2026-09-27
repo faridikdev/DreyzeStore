@@ -59,6 +59,15 @@ public actor FileCatalogSnapshotStore: CatalogSnapshotStore {
         }
     }
 
+    public func storageBytes() -> Int64 {
+        guard let files = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]) else { return 0 }
+        return files.reduce(into: Int64(0)) { total, file in
+            guard let values = try? file.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey, .isSymbolicLinkKey]),
+                  values.isRegularFile == true, values.isSymbolicLink != true else { return }
+            total += Int64(values.fileSize ?? 0)
+        }
+    }
+
     private func fileURL(for key: String) -> URL {
         let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
         return directory.appendingPathComponent(digest).appendingPathExtension("json")

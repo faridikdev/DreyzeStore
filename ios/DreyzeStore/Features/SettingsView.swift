@@ -15,7 +15,7 @@ struct SettingsView: View {
                 }
                 Section("General") {
                     NavigationLink { AppearanceSettingsView() } label: { Label("Appearance", systemImage: "circle.lefthalf.filled") }
-                    NavigationLink { SimpleSettingsView(title: "Downloads", symbol: "arrow.down.to.line", message: "Download management will be available when the verified package pipeline is implemented.") } label: { Label("Downloads", systemImage: "arrow.down.to.line") }
+                    NavigationLink { SimpleSettingsView(title: "Downloads", symbol: "arrow.down.to.line", message: "Download progress is shown while a package is being prepared. Verified packages are available in Library.") } label: { Label("Downloads", systemImage: "arrow.down.to.line") }
                 }
                 Section("Store") {
                     NavigationLink { SimpleSettingsView(title: "Installation", symbol: "square.and.arrow.down", message: "No installation backend is connected in this version. DreyzeStore will show only methods supported by your device when one is configured.") } label: { Label("Installation", systemImage: "square.and.arrow.down") }
@@ -70,28 +70,86 @@ private struct SimpleSettingsView: View {
 }
 
 private struct StorageSettingsView: View {
+    @StateObject private var downloadManager = DownloadManager.shared
     @State private var showingResult = false
+    @State private var showingDeleteConfirmation = false
     @State private var resultMessage = ""
+    @State private var usage = PackageStorageUsage(downloadedPackages: 0, temporaryFiles: 0, cache: 0)
+
     var body: some View {
         List {
-            Section {
-                Text("Catalog information is cached for up to 7 days. Image cache is limited to 96 MB on disk.").font(.footnote).foregroundStyle(.secondary)
-                Button(role: .destructive) {
-                    Task {
-                        do {
-                            try await FileCatalogSnapshotStore().clear()
-                            await RemoteImageService.shared.clearCache()
-                            resultMessage = "Cached catalog metadata and images were cleared."
-                        } catch {
-                            resultMessage = "The catalog cache could not be fully cleared. Please try again."
-                        }
-                        showingResult = true
-                    }
-                } label: { Label("Clear Cached Store Data", systemImage: "trash") }
+            Section("Downloaded Packages") {
+                LabeledContent("Packages", value: ByteCountFormatter.string(fromByteCount: usage.downloadedPackages, countStyle: .file))
+                Button(role: .destructive) { showingDeleteConfirmation = true } label: {
+                    Label("Delete Downloaded Packages", systemImage: "trash")
+                }
+                .disabled(usage.downloadedPackages == 0)
+            }
+            Section("Cache") {
+                LabeledContent("Cache", value: ByteCountFormatter.string(fromByteCount: usage.cache, countStyle: .file))
+                Text("Catalog metadata expires after 7 days. The image cache is limited to 96 MB on disk.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button(role: .destructive) { Task { await clearCache() } } label: {
+                    Label("Clear Cache", systemImage: "trash")
+                }
+                .disabled(usage.cache == 0)
+            }
+            Section("Temporary Files") {
+                LabeledContent("Temporary Files", value: ByteCountFormatter.string(fromByteCount: usage.temporaryFiles, countStyle: .file))
+                Text("Only inactive DreyzeStore-managed transfer files are removed.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button { cleanTemporaryFiles() } label: { Label("Clean Temporary Files", systemImage: "broom") }
+                    .disabled(usage.temporaryFiles == 0)
+            }
+            Section("Total") {
+                LabeledContent("DreyzeStore Storage", value: ByteCountFormatter.string(fromByteCount: usage.total, countStyle: .file))
             }
         }
         .navigationTitle("Storage").navigationBarTitleDisplayMode(.inline)
         .alert("Store Cache", isPresented: $showingResult) { Button("OK", role: .cancel) { } } message: { Text(resultMessage) }
+        .confirmationDialog("Delete Downloaded Packages?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
+            Button("Delete All Packages", role: .destructive) {
+                do {
+                    try downloadManager.deleteAllDownloadedPackages()
+                    resultMessage = "Downloaded packages were deleted."
+                } catch {
+                    resultMessage = "Some packages could not be deleted. Please try again."
+                }
+                showingResult = true
+                Task { await refreshUsage() }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { Text("This removes only verified package files managed by DreyzeStore.") }
+        .task { await refreshUsage() }
+    }
+
+    private func refreshUsage() async {
+        let metadataBytes = await FileCatalogSnapshotStore().storageBytes()
+        let imageBytes = await RemoteImageService.shared.diskCacheUsage()
+        usage = downloadManager.storageUsage(cacheBytes: metadataBytes + imageBytes)
+    }
+
+    private func clearCache() async {
+        do {
+            try await FileCatalogSnapshotStore().clear()
+            await RemoteImageService.shared.clearCache()
+            resultMessage = "Cached catalog metadata and images were cleared."
+        } catch {
+            resultMessage = "The cache could not be fully cleared. Please try again."
+        }
+        showingResult = true
+        await refreshUsage()
+    }
+
+    private func cleanTemporaryFiles() {
+        do {
+            let removed = try downloadManager.cleanTemporaryFiles()
+            resultMessage = "Cleaned \(ByteCountFormatter.string(fromByteCount: removed, countStyle: .file)) of inactive temporary files."
+        } catch {
+            resultMessage = "Temporary files could not be cleaned. Please try again."
+        }
+        showingResult = true
+        Task { await refreshUsage() }
     }
 }
 
@@ -111,10 +169,57 @@ private struct AboutSettingsView: View {
             }
             Section("Project") {
                 Link(destination: URL(string: "https://github.com/faridikdev/DreyzeStore")!) { Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right") }
-                NavigationLink("Licenses & Acknowledgements") { SimpleSettingsView(title: "Licenses", symbol: "doc.text", message: "DreyzeStore client code is distributed under the repository license. No third-party installer implementation is included in this build.") }
+                NavigationLink("Licenses & Acknowledgements") { LicenseAcknowledgementsView() }
                 NavigationLink("Privacy") { SimpleSettingsView(title: "Privacy", symbol: "hand.raised", message: "The store requests public catalog metadata from the API configured for this build. Search history is stored locally on this device.") }
             }
         }
         .navigationTitle("About").navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct LicenseAcknowledgementsView: View {
+    private let zipFoundationLicense = """
+    MIT License
+
+    Copyright (c) 2017-2025 Thomas Zoechling (https://www.peakstep.com)
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
+    """
+
+    var body: some View {
+        List {
+            Section("DreyzeStore") {
+                Text("The DreyzeStore client and service code are distributed under the repository MIT license.")
+            }
+            Section("ZIPFoundation 0.9.20") {
+                Text("Used to inspect ZIP/IPA entry metadata without extracting untrusted package paths.")
+                Text(zipFoundationLicense)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                Link("ZIPFoundation upstream", destination: URL(string: "https://github.com/weichsel/ZIPFoundation")!)
+            }
+            Section {
+                Text("No TrollStore source or installer backend is included.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+        .navigationTitle("Licenses")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }

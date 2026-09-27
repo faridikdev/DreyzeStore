@@ -2,8 +2,9 @@ import SwiftUI
 
 struct AppDetailsView: View {
     @StateObject private var model: AppDetailsViewModel
+    @StateObject private var downloadManager = DownloadManager.shared
     @State private var selectedScreenshot: AppScreenshot?
-    @State private var showInstallNotice = false
+    @State private var showDownloadSheet = false
 
     init(repository: (any StoreRepository)?, appID: String) {
         _model = StateObject(wrappedValue: AppDetailsViewModel(repository: repository, appID: appID))
@@ -26,8 +27,9 @@ struct AppDetailsView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .navigationBarTrailing) { ProfileButton() } }
         .task { await model.load() }
-        .alert("Installation isn’t available yet", isPresented: $showInstallNotice) { Button("OK", role: .cancel) { } }
-        message: { Text("Installation will be available through the configured installation backend.") }
+        .sheet(isPresented: $showDownloadSheet) {
+            if let app = model.app { DownloadFlowSheet(app: app, manager: downloadManager) }
+        }
         .fullScreenCover(item: $selectedScreenshot) { screenshot in
             ScreenshotGallery(screenshots: model.app?.screenshots ?? [], initial: screenshot)
         }
@@ -72,13 +74,13 @@ struct AppDetailsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            Button { showInstallNotice = true } label: {
-                HStack(spacing: 8) { Image(systemName: "arrow.down.to.line"); Text("GET") }
+            Button { showDownloadSheet = true } label: {
+                HStack(spacing: 8) { Image(systemName: "arrow.down.to.line"); Text(downloadTitle(for: app)) }
                     .font(.subheadline.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 13)
                     .foregroundStyle(.white).background(StorePalette.accent, in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Installation is not available in this version.")
+            .accessibilityHint("Downloads and verifies the package. It does not install the app.")
             HStack(spacing: 0) {
                 AppFact(title: "VERSION", value: app.currentVersion.version)
                 AppFact(title: "REQUIRES", value: "iOS \(app.currentVersion.minimumOSVersion)")
@@ -86,6 +88,17 @@ struct AppDetailsView: View {
             }
             .padding(.vertical, 14)
             .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        }
+    }
+
+    private func downloadTitle(for app: StoreApp) -> String {
+        switch downloadManager.state(for: app) {
+        case .preparing, .downloading: "DOWNLOADING"
+        case .verifying: "VERIFYING"
+        case .inspecting: "INSPECTING"
+        case .ready: "READY"
+        case .failed: "RETRY"
+        case .idle, .cancelled: "GET"
         }
     }
 

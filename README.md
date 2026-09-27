@@ -2,13 +2,13 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 3 connects the native SwiftUI client to the Phase 2 read-only catalog API.** Admin login and editing, IPA transfer/validation, real installation adapters, and production deployment remain future work.
+DreyzeStore is an open-source project for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **Phase 4 adds cancellable background-compatible IPA downloads, SHA-256 verification, and bounded ZIP/IPA metadata inspection.** Packages are only reported ready after validation; installation adapters, admin login/editing, and production deployment remain future work.
 
 An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
 
 ## Architecture
 
-- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, and a capability-gated installation protocol.
+- `ios/DreyzeStore`: SwiftUI iOS app, minimum iOS 16.0, typed async API client, paginated catalog/search, metadata and image caching, offline fallback, app details, and a managed download/verification pipeline. No installation backend is connected.
 - `backend`: TypeScript Cloudflare Worker using Hono, local D1 migrations, and local R2 bindings for eventual public assets and private staging. App summaries include a bounded short description so catalog cards do not fetch detail records one by one.
 - `admin`: React, TypeScript, and Vite static administration client. Phase 1 performs an API health check; write workflows and authentication are deferred.
 - `shared`: repository JSON Schema v1 and shared API DTOs.
@@ -18,7 +18,7 @@ See [architecture](docs/architecture.md), [iOS client](docs/ios-client.md), [bac
 
 ## Screenshots
 
-The native client now includes Today, Apps, Search, app details with screenshot gallery and version history, Updates, Library, and Settings. It displays only metadata returned by the configured API. Screenshots from the running app will be added after simulator review.
+The native client includes Today, Apps, Search, app details with screenshot gallery and version history, Updates, Library, and Settings. GET downloads the published release, verifies its checksum and IPA metadata, then lists it as a verified download. It does not install it. The catalog displays only metadata returned by the configured API. Screenshots from the running app will be added after simulator review.
 
 ## Requirements
 
@@ -69,7 +69,7 @@ The panel checks the configured API. It does not show fictional app entries, acc
 
 ## Repository format
 
-Repository v1 is JSON Schema Draft 2020-12 at [shared/schemas/repository-v1.schema.json](shared/schemas/repository-v1.schema.json). It strictly validates HTTPS URLs without credentials, UTC timestamps, reverse-DNS identifiers, version/build, minimum OS, screenshot metadata, package size, and lowercase SHA-256. The same runtime validator adds duplicate identifier checks. Test metadata lives only in the test suite and is not served as a catalog.
+Repository v1 is JSON Schema Draft 2020-12 at [shared/schemas/repository-v1.schema.json](shared/schemas/repository-v1.schema.json). It strictly validates HTTPS URLs without credentials, UTC timestamps, reverse-DNS identifiers, version/build, minimum OS, screenshot metadata, package size, and lowercase SHA-256. The same runtime validator adds duplicate identifier checks. The generated iOS ZIP fixture exists only during XCTest; no IPA is checked in or served as catalog data.
 
 ## Installation backends
 

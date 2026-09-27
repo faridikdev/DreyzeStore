@@ -1,24 +1,21 @@
 # Installation architecture
 
-**Status:** Phase 2. DreyzeStore will not ship a backend that reports success without a verifiable installation result. `InstallationBackend` is an interface only; no concrete backend is registered or implemented.
+**Status:** Phase 4. DreyzeStore has a working download, checksum, and package-inspection pipeline. `InstallationBackend` remains an interface only; no concrete backend is registered or implemented, so this client does not install packages.
 
-In Phase 1, `VerifiedPackage` has an internal initializer so future installation code can require a value produced by verification. The verifier is deferred to Phase 4. No TrollStore or TrollStore Lite source has been downloaded or copied into this repository. The current tab shell exposes no install action.
+`VerifiedPackage` can only be created by `PackageValidator` after the local file's digest matches the release metadata and its IPA structure and app metadata validate. No TrollStore or TrollStore Lite source has been downloaded or copied into this repository. This phase exposes download and package details only; the app does not offer an install action.
 
 ## What the iOS app can and cannot do
 
-The iOS client can use `URLSession` to download an IPA into a temporary app-container location, verify its published SHA-256, and inspect its ZIP/IPA metadata. A normal sandboxed app cannot call a public Apple API to install arbitrary IPA files, replace system package-management services, or enumerate all third-party installed apps. Installation and installed-app discovery are conditional capabilities, not baseline features of an App Store-style SwiftUI view.
+The iOS client uses a background-compatible `URLSession` to download an IPA into a UUID-named app-managed temporary location, verify the published SHA-256, and inspect required ZIP/IPA metadata without extracting arbitrary archive paths. The verified file is retained in DreyzeStore's managed package directory. A normal sandboxed app cannot call a public Apple API to install arbitrary IPA files, replace system package-management services, or enumerate all third-party installed apps. Installation and installed-app discovery are conditional capabilities, not baseline features of an App Store-style SwiftUI view.
 
 The UI uses these separate states:
 
 ```text
-GET -> Downloading -> Verifying -> Preparing handoff ->
-  Installed (only on backend confirmation)
-  Handed off (external app/system owns the next step)
-  Unavailable (no supported method)
-  Failed / Cancelled
+GET -> Downloading -> Verifying -> Inspecting -> Package Ready
+                                          (no installation backend in Phase 4)
 ```
 
-`Handed off` is not `Installed`. The download can still be a useful, verified, cancellable file when no install route exists. The UI explains the actual next step and does not offer an inactive Install button.
+`Package Ready` is not `Installed`. The UI reports a verified download and explicitly says the installation backend is not connected. Phase 5 must decide whether to add a backend and how it can report its real result.
 
 ## Backend contract
 
@@ -86,14 +83,14 @@ Structural validation also does not prove that iOS will accept an IPA's code sig
 ## Download and validation boundary
 
 1. Request a published release and expected byte size/SHA-256 from the selected repository.
-2. Download with a cancellable background-compatible `URLSession` task to a unique temporary file. Resume data is optional and untrusted; verify the final file from byte zero.
-3. Check available storage and exact size; calculate SHA-256 and compare in constant time where applicable. On mismatch, delete/quarantine the file and stop.
-4. Inspect the ZIP central directory and expected `Payload/<single AppName>.app/Info.plist`; verify bundle identifier, version, executable path, declared size, entry count, compressed/uncompressed totals, and expansion limits.
-5. Reject absolute paths, `..`, traversal after normalization, NULs, duplicate/conflicting paths, symlinks and special files, excessive nested paths, oversized entries, and zip-bomb ratios. Never extract outside a newly created, app-owned temporary directory. Prefer reading required entries without extracting the whole archive.
-6. Create an immutable `VerifiedPackage` only after all checks pass. Clean up on cancellation, mismatch, expiration, and final handoff according to retention settings.
-7. Call only the selected available backend. Record the backend's actual result type and preserve its explanation.
+2. Download with a cancellable background-compatible `URLSessionDownloadTask` to a UUID-named app-managed temporary file. The OS owns background scheduling; a manual retry starts a fresh transfer.
+3. Check available storage, the 1 GiB hard ceiling, and exact actual byte count. Calculate SHA-256 and compare it to the published value. On mismatch, delete the temporary file and stop.
+4. Preflight the ZIP end record and bound central-directory size before opening it, then read the directory and the single `Payload/<AppName>.app/Info.plist`; no archive path is extracted. Validate bundle ID, version/build, minimum OS, and executable entry.
+5. Reject absolute/traversal paths, paths deeper than 64 segments, duplicate normalized paths, special entries, escaping symlinks, entry counts above 100,000, expanded size above 8 GiB, an individual entry above 2 GiB, a compression ratio above 1,000, and Info.plist above 8 MiB.
+6. Create a validation receipt and immutable `VerifiedPackage` only after checksum, archive, and release metadata all agree. Clean up on cancellation, mismatch, failure, or explicit deletion.
+7. Phase 4 stops at `VerifiedPackage`. A future backend must accept this type, revalidate the stored bytes before use, and report only the result it can confirm.
 
-Archive parsing dependency selection is provisional: ZIPFoundation is MIT-licensed and is a candidate, but it must pass explicit security tests for the required limits before adoption. The validator must enforce its own path and resource limits instead of assuming a library's default extraction behavior is safe.
+ZIPFoundation 0.9.20 is pinned for central-directory reading and selective entry streaming. The app uses its archive APIs without extracting untrusted package paths and applies explicit limits in `PackageValidator`; ZIP64 sentinel records are currently rejected during preflight. The generated tests exercise malformed archives, traversal, absolute paths, escaping symlinks, compression ratios, entry counts, central-directory size, and metadata mismatches.
 
 ## Installed apps and updates
 

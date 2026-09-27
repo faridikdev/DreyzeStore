@@ -1,6 +1,6 @@
 # Security architecture
 
-**Status:** Security design baseline. Phase 2 applies these controls to the public catalog API (bounded validation, prepared D1 queries, allowlisted DTOs, request IDs, non-wildcard CORS, and safe caching). Admin and package controls below describe future implementation requirements; this document is not a certification that those later integrations are secure.
+**Status:** Security design baseline. Phase 2 applies bounded validation, prepared D1 queries, allowlisted DTOs, request IDs, non-wildcard CORS, and safe caching to the public catalog API. Phase 4 implements client download and package validation controls below. Admin upload/authentication and installation backends are still future work; this document is not a certification of those later integrations.
 
 ## Assets and trust boundaries
 
@@ -11,7 +11,7 @@
 | Pending IPA | Private staging R2 bucket, scoped upload/read capabilities, short lifecycle. |
 | Published IPA and artwork | Public immutable R2 bucket/CDN; every release is explicitly rights-confirmed and validated before publication. |
 | Catalog metadata and expected digest | D1/API or a third-party HTTPS source; treated as publisher-controlled, untrusted input. |
-| Downloaded package | iOS app temporary directory until digest and package checks pass. |
+| Downloaded package | UUID-named file in the app-managed temporary directory until digest and package checks pass; verified package directory afterwards. |
 | Validation runner | Ephemeral standard GitHub-hosted runner; parses untrusted archive data and must not execute it. |
 
 Main threats include account takeover, unauthorized publication, malicious or malformed repository data, API/CDN compromise, tampered downloads, archive/path/zip-bomb attacks, leaked presigned URLs, replayed upload reports, XSS in admin/catalog text, resource exhaustion, and accidental distribution of packages without rights.
@@ -40,11 +40,11 @@ GitHub documents OIDC tokens as short-lived workflow identity and requires expli
 
 ## Client downloads and package validation
 
-- Use HTTPS for API, assets, and repository sources. Reject `file:`, `data:`, and arbitrary schemes; reject URLs with username/password; constrain redirects and require HTTPS at every hop.
-- The app has an explicit package-size/storage ceiling. Compare received bytes to the manifest `size`; reject mismatch before archive processing.
-- Verify SHA-256 before handing any package to an installation backend. A mismatch cancels installation and displays a short explanation. Keep the computed and expected digests in a local diagnostic record without leaking signed download URLs.
+- Production package downloads accept HTTPS only. Reject URLs with username/password, constrain redirects to five, reject HTTPS-to-HTTP, and strip credentials on cross-host redirects. The only HTTP exception is an injected loopback-only XCTest transport policy.
+- The app enforces the published package size and a 1 GiB ceiling, checks available storage, and cancels if received bytes exceed the limit. Final bytes must exactly match declared size.
+- Verify SHA-256 from the downloaded local file before archive inspection. A mismatch deletes the temporary package and cannot be bypassed in the UI. A validation receipt can only be created by `PackageValidator`; the installation protocol accepts only `VerifiedPackage`.
 - Treat checksum as integrity relative to the digest source, not as a safety certificate or publisher identity. If the repository/API is compromised, both package and expected digest could be replaced. Present source identity and user trust context; do not label a package "safe" merely because its hash matches.
-- Parse archives under explicit resource ceilings: archive bytes, expanded bytes, compression ratio, entry count, path depth, metadata entry size, and elapsed work. Reject traversal, links/special files, duplicate normalized entries, and unexpected archive layouts. Read only the required metadata when possible; never extract to an attacker-selected path.
+- Parse archives under explicit resource ceilings: 1 GiB package, 100,000 entries, 64 path segments, 2 GiB per uncompressed entry, 8 GiB total declared expansion, 1,000 maximum compression ratio, and 8 MiB Info.plist. Reject traversal, absolute paths, special files, escaping symlinks, and duplicate normalized entries. Read only the required metadata; never extract an untrusted path.
 - Show a source trust warning before adding third-party repositories and a neutral verification statement on details/install sheets. “Verified” means hash and metadata matched, not malware-free or Apple-approved.
 
 Repository manifests are fetched by the client from their declared HTTPS origin, not proxied through the server, preventing arbitrary source URLs from becoming server-side request forgery targets. Validate JSON size, schema version, field lengths, collection counts, image response sizes, and URL schemes. Render text as text, never as injected HTML.

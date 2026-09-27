@@ -1,3 +1,13 @@
-# Downloads phase boundary
+# Download and package verification
 
-No download manager or package bytes are included in Phase 1. Phase 4 owns resumable/background-compatible transfers, progress, cancellation, bounded temporary storage, retry, cleanup, and the verified-package handoff.
+The app downloads only HTTPS package URLs with a background `URLSessionDownloadTask`. The session identifier is stable, pending release metadata is kept beside the app-managed temporary file, and the app delegate restores work when iOS delivers background URLSession events. System scheduling is controlled by iOS; an interrupted/failed transfer can be retried from byte zero. The app does not persist or trust arbitrary resume data.
+
+Each transfer uses a random UUID path under the app's Application Support `DreyzeStore/Packages/Temporary` directory. Server-provided filenames are ignored. Requests do not attach credentials or cookies. Every redirect is checked, HTTPS-to-HTTP is refused, cross-host credential headers are stripped, and the chain is capped at five redirects. Production policy accepts HTTPS only. The loopback HTTP exception exists only for the XCTest integration server.
+
+The transfer is limited to the metadata size and a 1 GiB hard package ceiling, with an available-storage check before starting. Actual byte count must equal the published size. SHA-256 is computed from the local file and compared before ZIP parsing; mismatch deletes the temporary package.
+
+`PackageValidator` bounds and checks the ZIP end record and central-directory size before opening it. ZIP64 sentinel records are rejected during preflight. It then reads ZIP central-directory entries without extracting them and rejects unsafe paths, paths deeper than 64 segments, duplicate normalized paths, special files, symlinks that resolve outside the single app bundle, entry count above 100,000, any entry above 2 GiB, total declared expansion above 8 GiB, compression ratio above 1,000, or an `Info.plist` above 8 MiB. It reads only the app's `Info.plist` and symlink targets, then checks bundle identifier, version, build, minimum OS, and the declared executable path.
+
+Only `PackageValidator` can create a `VerifiedPackage` or validation receipt. The package is moved from the temporary directory into the managed `Verified` directory after checksum, archive, and release-metadata checks pass. The installation protocol accepts `VerifiedPackage`; this phase implements no installer and shows the result as **Package Ready**, never **Installed**.
+
+The runtime test fixture is assembled from generated plist metadata and short non-executable bytes during XCTest. It is not a distributable app or a checked-in `.ipa`. No third-party app or IPA is used. ZIPFoundation 0.9.20 is pinned as a Swift Package dependency; it is MIT-licensed, and its acknowledgement/license are in [`docs/licenses.md`](../../../docs/licenses.md) and [`docs/third-party/ZIPFoundation-MIT.txt`](../../../docs/third-party/ZIPFoundation-MIT.txt).

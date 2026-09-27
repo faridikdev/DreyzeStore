@@ -14,7 +14,7 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
     var message: String {
         switch self {
         case .installed: "Installed app inventory becomes available with a supported installation backend."
-        case .downloaded: "Packages you explicitly download will appear here in a later phase."
+        case .downloaded: "Packages you download and verify will appear here."
         case .updates: "Updates will appear when DreyzeStore can read a real installed app inventory."
         }
     }
@@ -22,15 +22,20 @@ private enum LibrarySection: String, CaseIterable, Identifiable {
 
 struct LibraryView: View {
     @State private var selection: LibrarySection = .installed
+    @StateObject private var downloadManager = DownloadManager.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         VStack(spacing: 18) {
             Picker("Library", selection: $selection) {
                 ForEach(LibrarySection.allCases) { item in Text(item.rawValue).tag(item) }
             }.pickerStyle(.segmented).padding(.horizontal, 20).padding(.top, 10)
-            Spacer(minLength: 0)
-            StoreEmptyState(symbol: selection.symbol, title: selection.title, message: selection.message)
-            Spacer(minLength: 0)
+            if selection == .downloaded {
+                DownloadedPackagesView(manager: downloadManager)
+            } else {
+                Spacer(minLength: 0)
+                StoreEmptyState(symbol: selection.symbol, title: selection.title, message: selection.message)
+                Spacer(minLength: 0)
+            }
         }
         .background(StorePalette.canvas.ignoresSafeArea())
         .navigationTitle("Library")

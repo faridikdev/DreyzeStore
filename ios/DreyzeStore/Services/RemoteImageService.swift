@@ -39,4 +39,8 @@ public actor RemoteImageService {
     public func clearCache() {
         session.configuration.urlCache?.removeAllCachedResponses()
     }
+
+    public func diskCacheUsage() -> Int64 {
+        Int64(session.configuration.urlCache?.currentDiskUsage ?? 0)
+    }
 }
