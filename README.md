@@ -1,5 +1,7 @@
 # DreyzeStore
 
+[English](README.md) · [Русский](README.ru.md)
+
 DreyzeStore is an open-source foundation for a native iOS app catalog, package metadata API, repository format, and web administration panel. It is being built in phases. **The current Phase 1 code is project infrastructure, not a complete store:** catalog APIs, admin login and editing, downloads, IPA validation, installation adapters, and production deployment have not been implemented.
 
 An ordinary sandboxed iOS app cannot generally install an arbitrary IPA or enumerate every installed app. The client will only report an installation when a real, available backend confirms it. Downloading or verifying a package is a separate state.
