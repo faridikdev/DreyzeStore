@@ -1,0 +1,36 @@
+{
+  "name": "dreyzestore",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DreyzeStore monorepo JavaScript and TypeScript tooling",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "workspaces": [
+    "shared",
+    "backend",
+    "admin"
+  ],
+  "scripts": {
+    "lint": "eslint . --ext .js,.mjs,.ts,.tsx",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "vitest run",
+    "build": "npm run build --workspaces --if-present",
+    "check": "npm run lint && npm run typecheck && npm test && python scripts/validate_migrations.py && npm run build",
+    "dev:api": "wrangler dev --local --config backend/wrangler.jsonc",
+    "dev:admin": "npm run dev --workspace @dreyzestore/admin",
+    "db:migrate:local": "wrangler d1 migrations apply dreyzestore-local --local --config backend/wrangler.jsonc"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "eslint": "^10.0.0",
+    "globals": "^17.0.0",
+    "jsdom": "^30.0.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.0",
+    "vitest": "^5.0.0"
+  }
+}

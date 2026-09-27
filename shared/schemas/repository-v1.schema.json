@@ -1,0 +1,218 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:dreyze:schemas:repository:v1",
+  "title": "DreyzeStore Repository v1",
+  "description": "Strict metadata contract for official and third-party DreyzeStore repositories.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "name",
+    "identifier",
+    "description",
+    "icon",
+    "generatedAt",
+    "apps"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "identifier": {
+      "$ref": "#/$defs/reverseDnsIdentifier"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000
+    },
+    "icon": {
+      "$ref": "#/$defs/httpsUrl"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "Z$"
+    },
+    "apps": {
+      "type": "array",
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/app"
+      }
+    }
+  },
+  "$defs": {
+    "httpsUrl": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://(?![^/?#]*@)",
+      "maxLength": 2048
+    },
+    "reverseDnsIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$"
+    },
+    "bundleIdentifier": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*(\\.[A-Za-z0-9][A-Za-z0-9-]*)+$"
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "bundleIdentifier",
+        "name",
+        "developer",
+        "category",
+        "description",
+        "icon",
+        "screenshots",
+        "versions"
+      ],
+      "properties": {
+        "bundleIdentifier": {
+          "$ref": "#/$defs/bundleIdentifier"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "developer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "category": {
+          "enum": [
+            "Utilities",
+            "Developer Tools",
+            "Games",
+            "Emulators",
+            "Media",
+            "Productivity",
+            "Social",
+            "Customization",
+            "Other"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20000
+        },
+        "icon": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "screenshots": {
+          "type": "array",
+          "maxItems": 20,
+          "items": {
+            "$ref": "#/$defs/screenshot"
+          }
+        },
+        "versions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/version"
+          }
+        }
+      }
+    },
+    "screenshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "width", "height", "alt"],
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        },
+        "alt": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "build",
+        "versionDate",
+        "minimumOSVersion",
+        "downloadURL",
+        "sha256",
+        "size",
+        "releaseNotes",
+        "channel"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 100,
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*))?(-((0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "build": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "versionDate": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "Z$"
+        },
+        "minimumOSVersion": {
+          "type": "string",
+          "maxLength": 32,
+          "pattern": "^[0-9]{1,3}(\\.[0-9]{1,3}){1,2}$"
+        },
+        "downloadURL": {
+          "$ref": "#/$defs/httpsUrl"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967296
+        },
+        "releaseNotes": {
+          "type": "string",
+          "maxLength": 10000
+        },
+        "channel": {
+          "enum": ["stable", "beta"]
+        }
+      }
+    }
+  }
+}

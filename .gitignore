@@ -1,0 +1,52 @@
+# JavaScript / TypeScript dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+.turbo/
+.vite/
+.wrangler/
+.dev.vars
+.dev.vars.*
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+*.local.env
+
+# Apple development artifacts
+DerivedData/
+**/DerivedData/
+build/
+**/build/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+xcuserdata/
+**/xcuserdata/
+*.ipa
+*.tipa
+*.mobileprovision
+*.p12
+*.p8
+*.provisionprofile
+*.xcarchive/
+*.xcresult/
+*.dSYM/
+*.app/
+*.IPA
+*.TIPA
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Temporary output
+*.log
+*.tmp
+*.swp
