@@ -110,7 +110,8 @@ final class PackageStorage: @unchecked Sendable {
     func save(outcome: PackageTransferOutcome, for id: UUID) {
         lock.lock(); defer { lock.unlock() }
         guard (try? ensureDirectories()) != nil else { return }
-        guard (try? JSONEncoder.packageStorage.encode(outcome))?.write(to: outcomeURL(for: id), options: .atomic) != nil else { return }
+        guard let data = try? JSONEncoder.packageStorage.encode(outcome),
+              (try? data.write(to: outcomeURL(for: id), options: .atomic)) != nil else { return }
         try? fileManager.setAttributes([.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication], ofItemAtPath: outcomeURL(for: id).path)
     }
 
