@@ -38,6 +38,37 @@ final class WindowsCompanionTests: XCTestCase {
         XCTAssertNil(receipt.detail?.app)
     }
 
+    func testCompanionRecordRoundTripsSigningTeamAndActualExpiryDates() throws {
+        let certificateExpiry = Date(timeIntervalSince1970: 1_800_000_000)
+        let profileExpiry = Date(timeIntervalSince1970: 1_800_086_400)
+        let record = PairedWindowsCompanion(
+            clientID: "client-test",
+            endpoint: URL(string: "https://192.168.1.20:44218/api/v1")!,
+            certificateSHA256: String(repeating: "a", count: 64),
+            token: "unit-test-token",
+            pairedAt: Date(timeIntervalSince1970: 1_799_000_000),
+            deviceUDID: "device-test",
+            deviceName: "Test iPhone",
+            deviceProductVersion: "26.0",
+            developerMode: nil,
+            signingConfigured: false,
+            signingIdentity: "Apple Development",
+            teamIdentifier: "TEAMTEST1",
+            signingMessage: "Import a current provisioning profile.",
+            certificateExpiresAt: certificateExpiry,
+            provisioningExpiresAt: profileExpiry,
+            connectionError: nil
+        )
+
+        let data = try JSONEncoder.companion.encode(record)
+        let restored = try JSONDecoder.companion.decode(PairedWindowsCompanion.self, from: data)
+        XCTAssertEqual(restored.signingIdentity, "Apple Development")
+        XCTAssertEqual(restored.teamIdentifier, "TEAMTEST1")
+        XCTAssertEqual(restored.certificateExpiresAt, certificateExpiry)
+        XCTAssertEqual(restored.provisioningExpiresAt, profileExpiry)
+        XCTAssertFalse(restored.signingConfigured)
+    }
+
     func testWindowsCompanionBackendRequiresAnExplicitConfirmedInstallCapability() {
         let backend = WindowsCompanionInstallationBackend()
         XCTAssertTrue(backend.capabilities.contains(.confirmedInstall))
