@@ -1,0 +1,284 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		000000000000000000000201 /* DreyzeStoreApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000101 /* DreyzeStoreApp.swift */; };
+		000000000000000000000202 /* RootTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000102 /* RootTabView.swift */; };
+		000000000000000000000203 /* APIConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000103 /* APIConfiguration.swift */; };
+		000000000000000000000204 /* StoreError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000104 /* StoreError.swift */; };
+		000000000000000000000205 /* APIEnvelope.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000105 /* APIEnvelope.swift */; };
+		000000000000000000000206 /* StoreModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000106 /* StoreModels.swift */; };
+		000000000000000000000207 /* APIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000107 /* APIClient.swift */; };
+		000000000000000000000208 /* DeviceCapabilityService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000108 /* DeviceCapabilityService.swift */; };
+		000000000000000000000209 /* StoreRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000109 /* StoreRepository.swift */; };
+		00000000000000000000020A /* CatalogSnapshotStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010A /* CatalogSnapshotStore.swift */; };
+		00000000000000000000020B /* PackageVerificationError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010B /* PackageVerificationError.swift */; };
+		00000000000000000000020C /* InstallationBackend.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010C /* InstallationBackend.swift */; };
+		00000000000000000000020D /* SemanticVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010D /* SemanticVersion.swift */; };
+		00000000000000000000020E /* StoreFeaturePlaceholderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010E /* StoreFeaturePlaceholderView.swift */; };
+		00000000000000000000020F /* TodayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00000000000000000000010F /* TodayView.swift */; };
+		000000000000000000000210 /* AppsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000110 /* AppsView.swift */; };
+		000000000000000000000211 /* SearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000111 /* SearchView.swift */; };
+		000000000000000000000212 /* UpdatesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000112 /* UpdatesView.swift */; };
+		000000000000000000000213 /* LibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000113 /* LibraryView.swift */; };
+		000000000000000000000214 /* SemanticVersionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000114 /* SemanticVersionTests.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		000000000000000000000301 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 000000000000000000000002;
+			remoteInfo = DreyzeStore;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		000000000000000000000101 /* DreyzeStoreApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DreyzeStoreApp.swift; sourceTree = "<group>"; };
+		000000000000000000000102 /* RootTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootTabView.swift; sourceTree = "<group>"; };
+		000000000000000000000103 /* APIConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIConfiguration.swift; sourceTree = "<group>"; };
+		000000000000000000000104 /* StoreError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreError.swift; sourceTree = "<group>"; };
+		000000000000000000000105 /* APIEnvelope.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIEnvelope.swift; sourceTree = "<group>"; };
+		000000000000000000000106 /* StoreModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreModels.swift; sourceTree = "<group>"; };
+		000000000000000000000107 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
+		000000000000000000000108 /* DeviceCapabilityService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceCapabilityService.swift; sourceTree = "<group>"; };
+		000000000000000000000109 /* StoreRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreRepository.swift; sourceTree = "<group>"; };
+		00000000000000000000010A /* CatalogSnapshotStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CatalogSnapshotStore.swift; sourceTree = "<group>"; };
+		00000000000000000000010B /* PackageVerificationError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PackageVerificationError.swift; sourceTree = "<group>"; };
+		00000000000000000000010C /* InstallationBackend.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallationBackend.swift; sourceTree = "<group>"; };
+		00000000000000000000010D /* SemanticVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticVersion.swift; sourceTree = "<group>"; };
+		00000000000000000000010E /* StoreFeaturePlaceholderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreFeaturePlaceholderView.swift; sourceTree = "<group>"; };
+		00000000000000000000010F /* TodayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodayView.swift; sourceTree = "<group>"; };
+		000000000000000000000110 /* AppsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppsView.swift; sourceTree = "<group>"; };
+		000000000000000000000111 /* SearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchView.swift; sourceTree = "<group>"; };
+		000000000000000000000112 /* UpdatesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesView.swift; sourceTree = "<group>"; };
+		000000000000000000000113 /* LibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibraryView.swift; sourceTree = "<group>"; };
+		000000000000000000000114 /* SemanticVersionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SemanticVersionTests.swift; sourceTree = "<group>"; };
+		000000000000000000000115 /* DreyzeStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		000000000000000000000116 /* DreyzeStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreyzeStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		000000000000000000000401 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000402 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		000000000000000000000010 = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000011 /* App */,
+				000000000000000000000012 /* Core */,
+				000000000000000000000013 /* Models */,
+				000000000000000000000014 /* Networking */,
+				000000000000000000000015 /* Services */,
+				000000000000000000000016 /* Repositories */,
+				000000000000000000000017 /* Persistence */,
+				000000000000000000000018 /* Security */,
+				000000000000000000000019 /* Installation */,
+				00000000000000000000001A /* Utilities */,
+				00000000000000000000001B /* Components */,
+				00000000000000000000001C /* Features */,
+				000000000000000000000022 /* Tests */,
+				000000000000000000000023 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		000000000000000000000011 /* App */ = {isa = PBXGroup; children = (000000000000000000000101, 000000000000000000000102,); path = App; sourceTree = "<group>"; };
+		000000000000000000000012 /* Core */ = {isa = PBXGroup; children = (000000000000000000000103, 000000000000000000000104,); path = Core; sourceTree = "<group>"; };
+		000000000000000000000013 /* Models */ = {isa = PBXGroup; children = (000000000000000000000105, 000000000000000000000106,); path = Models; sourceTree = "<group>"; };
+		000000000000000000000014 /* Networking */ = {isa = PBXGroup; children = (000000000000000000000107,); path = Networking; sourceTree = "<group>"; };
+		000000000000000000000015 /* Services */ = {isa = PBXGroup; children = (000000000000000000000108,); path = Services; sourceTree = "<group>"; };
+		000000000000000000000016 /* Repositories */ = {isa = PBXGroup; children = (000000000000000000000109,); path = Repositories; sourceTree = "<group>"; };
+		000000000000000000000017 /* Persistence */ = {isa = PBXGroup; children = (00000000000000000000010A,); path = Persistence; sourceTree = "<group>"; };
+		000000000000000000000018 /* Security */ = {isa = PBXGroup; children = (00000000000000000000010B,); path = Security; sourceTree = "<group>"; };
+		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C,); path = Installation; sourceTree = "<group>"; };
+		00000000000000000000001A /* Utilities */ = {isa = PBXGroup; children = (00000000000000000000010D,); path = Utilities; sourceTree = "<group>"; };
+		00000000000000000000001B /* Components */ = {isa = PBXGroup; children = (00000000000000000000010E,); path = Components; sourceTree = "<group>"; };
+		00000000000000000000001C /* Features */ = {
+			isa = PBXGroup;
+			children = (
+				000000000000000000000030 /* Today */,
+				000000000000000000000031 /* Apps */,
+				000000000000000000000032 /* Search */,
+				000000000000000000000033 /* Updates */,
+				000000000000000000000034 /* Library */,
+			);
+			path = Features;
+			sourceTree = "<group>";
+		};
+		000000000000000000000030 /* Today */ = {isa = PBXGroup; children = (00000000000000000000010F,); path = Today; sourceTree = "<group>"; };
+		000000000000000000000031 /* Apps */ = {isa = PBXGroup; children = (000000000000000000000110,); path = Apps; sourceTree = "<group>"; };
+		000000000000000000000032 /* Search */ = {isa = PBXGroup; children = (000000000000000000000111,); path = Search; sourceTree = "<group>"; };
+		000000000000000000000033 /* Updates */ = {isa = PBXGroup; children = (000000000000000000000112,); path = Updates; sourceTree = "<group>"; };
+		000000000000000000000034 /* Library */ = {isa = PBXGroup; children = (000000000000000000000113,); path = Library; sourceTree = "<group>"; };
+		000000000000000000000022 /* Tests */ = {isa = PBXGroup; children = (000000000000000000000114,); path = Tests; sourceTree = "<group>"; };
+		000000000000000000000023 /* Products */ = {isa = PBXGroup; children = (000000000000000000000115, 000000000000000000000116,); name = Products; sourceTree = "<group>"; };
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		000000000000000000000002 /* DreyzeStore */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000502 /* Build configuration list for PBXNativeTarget "DreyzeStore" */;
+			buildPhases = (000000000000000000000601 /* Sources */, 000000000000000000000401 /* Frameworks */, 000000000000000000000602 /* Resources */,);
+			buildRules = ();
+			dependencies = ();
+			name = DreyzeStore;
+			productName = DreyzeStore;
+			productReference = 000000000000000000000115 /* DreyzeStore.app */;
+			productType = "com.apple.product-type.application";
+		};
+		000000000000000000000003 /* DreyzeStoreTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 000000000000000000000503 /* Build configuration list for PBXNativeTarget "DreyzeStoreTests" */;
+			buildPhases = (000000000000000000000603 /* Sources */, 000000000000000000000402 /* Frameworks */, 000000000000000000000604 /* Resources */,);
+			buildRules = ();
+			dependencies = (000000000000000000000701 /* PBXTargetDependency */,);
+			name = DreyzeStoreTests;
+			productName = DreyzeStoreTests;
+			productReference = 000000000000000000000116 /* DreyzeStoreTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		000000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					000000000000000000000002 = {CreatedOnToolsVersion = 16.0; };
+					000000000000000000000003 = {CreatedOnToolsVersion = 16.0; TestTargetID = 000000000000000000000002; };
+				};
+			};
+			buildConfigurationList = 000000000000000000000501 /* Build configuration list for PBXProject "DreyzeStore" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base,);
+			mainGroup = 000000000000000000000010;
+			productRefGroup = 000000000000000000000023;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (000000000000000000000002 /* DreyzeStore */, 000000000000000000000003 /* DreyzeStoreTests */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		000000000000000000000602 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000604 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		000000000000000000000601 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				000000000000000000000201, 000000000000000000000202, 000000000000000000000203,
+				000000000000000000000204, 000000000000000000000205, 000000000000000000000206,
+				000000000000000000000207, 000000000000000000000208, 000000000000000000000209,
+				00000000000000000000020A, 00000000000000000000020B, 00000000000000000000020C,
+				00000000000000000000020D, 00000000000000000000020E, 00000000000000000000020F,
+				000000000000000000000210, 000000000000000000000211, 000000000000000000000212,
+				000000000000000000000213,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		000000000000000000000603 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000214,); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		000000000000000000000701 /* PBXTargetDependency */ = {isa = PBXTargetDependency; target = 000000000000000000000002 /* DreyzeStore */; targetProxy = 000000000000000000000301 /* PBXContainerItemProxy */; };
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		000000000000000000000801 /* Project Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {CLANG_ENABLE_MODULES = YES; DEBUG_INFORMATION_FORMAT = dwarf; ENABLE_TESTABILITY = YES; IPHONEOS_DEPLOYMENT_TARGET = 16.0; SDKROOT = iphoneos; SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)"; SWIFT_VERSION = 5.0; };
+			name = Debug;
+		};
+		000000000000000000000802 /* Project Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {CLANG_ENABLE_MODULES = YES; DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; SDKROOT = iphoneos; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_VERSION = 5.0; };
+			name = Release;
+		};
+		000000000000000000000803 /* App Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DREYZE_API_BASE_URL = "https://api.dreyzestore.invalid/api/v1";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_DreyzeAPIBaseURL = "$(DREYZE_API_BASE_URL)";
+				INFOPLIST_KEY_CFBundleDisplayName = DreyzeStore;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		000000000000000000000804 /* App Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DREYZE_API_BASE_URL = "https://api.dreyzestore.invalid/api/v1";
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_DreyzeAPIBaseURL = "$(DREYZE_API_BASE_URL)";
+				INFOPLIST_KEY_CFBundleDisplayName = DreyzeStore;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
+		000000000000000000000805 /* Tests Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DreyzeStore.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DreyzeStore";
+			};
+			name = Debug;
+		};
+		000000000000000000000806 /* Tests Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DreyzeStore.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DreyzeStore";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		000000000000000000000501 /* Build configuration list for PBXProject "DreyzeStore" */ = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000801, 000000000000000000000802,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		000000000000000000000502 /* Build configuration list for PBXNativeTarget "DreyzeStore" */ = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000803, 000000000000000000000804,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		000000000000000000000503 /* Build configuration list for PBXNativeTarget "DreyzeStoreTests" */ = {isa = XCConfigurationList; buildConfigurations = (000000000000000000000805, 000000000000000000000806,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = 000000000000000000000001 /* Project object */;
+}
