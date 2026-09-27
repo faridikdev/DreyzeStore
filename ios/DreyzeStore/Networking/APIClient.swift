@@ -119,7 +119,18 @@ public struct APIClient: Sendable {
 }
 
 private extension APIEnvelope where Value == [StoreApp] {
-    func asPage() -> AppsPage { AppsPage(data: data, meta: meta) }
+    func asPage() -> AppsPage {
+        let pageMetadata = meta.map {
+            PageMetadata(
+                requestId: $0.requestId,
+                page: $0.page,
+                pageSize: $0.pageSize,
+                hasMore: $0.hasMore,
+                nextCursor: $0.nextCursor
+            )
+        }
+        return AppsPage(data: data, meta: pageMetadata)
+    }
 }
 
 private extension JSONDecoder {
