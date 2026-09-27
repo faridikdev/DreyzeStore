@@ -67,8 +67,14 @@ final class StorePhase3Tests: XCTestCase {
 
     func testSearchUsesQueryAndDebounceCancelsEarlierTerm() async throws {
         let repository = RecordingStoreRepository()
-        let defaults = UserDefaults(suiteName: UUID().uuidString)!
-        let model = await MainActor.run { SearchViewModel(repository: repository, defaults: defaults, debounceNanoseconds: 10_000_000) }
+        let defaultsSuiteName = UUID().uuidString
+        let model = await MainActor.run {
+            SearchViewModel(
+                repository: repository,
+                defaults: UserDefaults(suiteName: defaultsSuiteName)!,
+                debounceNanoseconds: 10_000_000
+            )
+        }
         await MainActor.run { model.text = "Orbit" }
         try await Task.sleep(nanoseconds: 2_000_000)
         await MainActor.run { model.text = "Timer" }
