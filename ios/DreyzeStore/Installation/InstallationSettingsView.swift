@@ -48,7 +48,7 @@ struct InstallationSettingsView: View {
         if option.identifier == TrollStoreBackend().identifier {
             return "Uses iOS Open In for the com.apple.itunes.ipa document type. TrollStore or TrollStore Lite can receive the file when installed and registered; select the destination in the system menu. Its installation prompt follows its own settings. DreyzeStore reports Handed Off, not Installed."
         }
-        switch option.availability {
+        return switch option.availability {
         case .available: "The system share sheet can hand the verified IPA to another app. This does not mean the app was installed."
         case .unavailable(let reason), .requiresConfiguration(let reason), .unsupported(let reason): reason
         }
