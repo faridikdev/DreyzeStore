@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend and shared contracts
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck --workspace @dreyzestore/shared
+      - run: npm run typecheck --workspace @dreyzestore/api
+      - run: npm test
+      - run: python scripts/validate_migrations.py
+      - run: npm run build --workspace @dreyzestore/api
+
+  admin:
+    name: Admin panel
+    if: github.event.repository.visibility == 'public'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck --workspace @dreyzestore/admin
+      - run: npm run test --workspace @dreyzestore/admin
+      - run: npm run build --workspace @dreyzestore/admin
+
+  ios:
+    name: iOS simulator build and tests
+    if: github.event.repository.visibility == 'public'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Select an available iPhone simulator
+        id: simulator
+        shell: bash
+        run: |
+          simulator_id="$(xcrun simctl list devices available -j | python3 -c 'import json,sys; data=json.load(sys.stdin); devices=[d for runtime in data["devices"].values() for d in runtime if d["isAvailable"] and d["name"].startswith("iPhone")]; print(devices[0]["udid"] if devices else "")')"
+          if [[ -z "$simulator_id" ]]; then
+            echo "No available iPhone simulator was found on this runner." >&2
+            exit 1
+          fi
+          echo "id=$simulator_id" >> "$GITHUB_OUTPUT"
+      - name: Resolve Xcode package dependencies
+        run: xcodebuild -resolvePackageDependencies -project ios/DreyzeStore/DreyzeStore.xcodeproj -scheme DreyzeStore
+      - name: Build and test
+        run: >-
+          xcodebuild test
+          -project ios/DreyzeStore/DreyzeStore.xcodeproj
+          -scheme DreyzeStore
+          -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.id }}"
+          CODE_SIGNING_ALLOWED=NO
