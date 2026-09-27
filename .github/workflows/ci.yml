@@ -26,13 +26,13 @@ jobs:
           target: x86_64-pc-windows-msvc
           components: rustfmt
       - run: npm ci
+      - name: Build pinned zsign sidecar
+        shell: pwsh
+        run: ./scripts/build-zsign-windows.ps1
       - run: cargo fmt --check --manifest-path apps/windows-companion/src-tauri/Cargo.toml
       - run: cargo test --manifest-path apps/windows-companion/src-tauri/Cargo.toml
       - run: cargo check --manifest-path apps/windows-companion/src-tauri/Cargo.toml
       - run: npm run build --workspace @dreyzestore/windows-companion
-      - name: Build pinned zsign sidecar
-        shell: pwsh
-        run: ./scripts/build-zsign-windows.ps1
       - name: Build unsigned Windows installers
         run: npm run tauri --workspace @dreyzestore/windows-companion -- build --bundles nsis,msi
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

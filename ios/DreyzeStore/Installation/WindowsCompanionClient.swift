@@ -214,7 +214,7 @@ private struct PackageExpectation: Encodable {
     }
 }
 
-private struct CompanionInstalledApp: Decodable {
+struct CompanionInstalledApp: Decodable {
     let bundleIdentifier: String
     let version: String?
     let build: String?
