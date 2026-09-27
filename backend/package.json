@@ -1,0 +1,20 @@
+{
+  "name": "@dreyzestore/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run src",
+    "build": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {
+    "@dreyzestore/shared": "0.1.0",
+    "hono": "^4.13.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260927.1",
+    "wrangler": "^4.141.0"
+  }
+}
