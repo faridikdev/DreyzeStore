@@ -90,12 +90,12 @@ struct UpdatesView: View {
         case .live(let snapshot):
             let inventory = "Live iPhone inventory · checked \(snapshot.lastChecked.formatted(date: .omitted, time: .shortened))"
             switch model.companionAvailability {
-            case .available: "\(inventory) · Signing ready"
-            case .unavailable(let reason), .unsupported(let reason): "\(inventory) · \(reason)"
-            case .requiresConfiguration(let reason): "\(inventory) · Setup required: \(reason)"
+            case .available: return "\(inventory) · Signing ready"
+            case .unavailable(let reason), .unsupported(let reason): return "\(inventory) · \(reason)"
+            case .requiresConfiguration(let reason): return "\(inventory) · Setup required: \(reason)"
             }
-        case .cached(let snapshot): "Last checked \(snapshot.lastChecked.formatted(date: .abbreviated, time: .shortened)) · saved inventory"
-        default: "Companion inventory unavailable"
+        case .cached(let snapshot): return "Last checked \(snapshot.lastChecked.formatted(date: .abbreviated, time: .shortened)) · saved inventory"
+        default: return "Companion inventory unavailable"
         }
     }
 
