@@ -33,6 +33,10 @@ jobs:
       - run: cargo fmt --check --manifest-path apps/windows-companion/src-tauri/Cargo.toml
       - run: cargo test --manifest-path apps/windows-companion/src-tauri/Cargo.toml
       - run: cargo check --manifest-path apps/windows-companion/src-tauri/Cargo.toml
+      - name: Install RustSec cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit Rust dependency advisories
+        run: cargo audit --file apps/windows-companion/src-tauri/Cargo.lock
       - run: npm run build --workspace @dreyzestore/windows-companion
       - name: Build unsigned Windows installers
         run: npm run tauri --workspace @dreyzestore/windows-companion -- build --bundles nsis,msi
