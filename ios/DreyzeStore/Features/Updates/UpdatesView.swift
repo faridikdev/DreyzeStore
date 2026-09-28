@@ -23,10 +23,7 @@ struct UpdatesView: View {
                     VStack(spacing: 12) { ForEach(0..<3, id: \.self) { _ in StoreSkeletonCard() } }
                 } else {
                     if !model.updateCheckIsFresh && model.updates.isEmpty && model.recentlyUpdated.isEmpty {
-                        let message: String
-                        if case .error(let error) = model.state { message = error }
-                        else { message = "Connect to the internet or pull to refresh. A saved inventory does not prove that the catalog has been checked recently." }
-                        StoreLoadError(title: "Couldn’t Check for Updates", message: message) { Task { await model.load(refresh: true) } }
+                        StoreLoadError(title: "Couldn’t Check for Updates", message: failedUpdateCheckMessage) { Task { await model.load(refresh: true) } }
                     }
                     if !model.expiringRecords.isEmpty { expiringSection }
                     if !model.updates.isEmpty { updatesSection }
@@ -100,6 +97,11 @@ struct UpdatesView: View {
         case .cached(let snapshot): "Last checked \(snapshot.lastChecked.formatted(date: .abbreviated, time: .shortened)) · saved inventory"
         default: "Companion inventory unavailable"
         }
+    }
+
+    private var failedUpdateCheckMessage: String {
+        if case .error(let message) = model.state { return message }
+        return "Connect to the internet or pull to refresh. A saved inventory does not prove that the catalog has been checked recently."
     }
 
     private var expiringSection: some View {
