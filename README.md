@@ -2,7 +2,7 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source native iOS catalog, package verification client, Cloudflare Workers API, repository format, administrator publishing panel, and local Windows companion for development signing and installation. The project is developed in phases. **Phase 7 adds Companion-confirmed installed inventory, published update detection, verified update installation, signing refresh, and local update history.**
+DreyzeStore 0.9.0 RC1 is an open-source native iOS catalog and package verification client, Cloudflare Workers API, repository format, administrator publishing panel, and local Windows companion for development signing and installation. **Phase 8 focuses on onboarding, recovery, release readiness and physical-device testing.**
 
 The iOS client downloads and verifies published packages. On stock iOS it can pair to the user's Windows Companion over a pinned local TLS connection; Windows independently verifies, signs with an imported local Apple Development identity, installs over the trusted USB device service, and confirms the exact app through device inventory before reporting **Installed**. Apple Account/2FA login and free Personal Team provisioning are not automated: Apple documents that flow through Xcode on Mac. A local test-install action accepts only user-owned test apps under `org.dreyzestore.test.*`. Physical iPhone installation is still **NOT VERIFIED**. TrollStore document handoff remains a separate optional path for compatible environments and reports **Handed Off**, never **Installed**.
 
@@ -17,13 +17,15 @@ The iOS client downloads and verifies published packages. On stock iOS it can pa
 - `scripts/validate_ipa.py` — isolated, bounded IPA metadata validator used by the GitHub Actions validator workflow.
 - `.github/workflows/ci.yml` — backend/admin checks, macOS iOS simulator build/tests, and Windows Companion tests/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — OIDC-authenticated, per-upload validation workflow.
 
+See [getting started](docs/getting-started.md), [troubleshooting](docs/troubleshooting.md), [privacy](docs/privacy.md), and the [release test matrix](docs/release-test-matrix.md). The CI workflow builds unsigned iOS output and a generated owner-authorized test IPA, plus unsigned NSIS/MSI installers with SHA-256 manifests. **Physical iPhone installation remains NOT VERIFIED.**
+
 See [architecture](docs/architecture.md), [API](docs/api.md), [admin operations](docs/admin.md), [bootstrap](docs/admin-bootstrap.md), [upload pipeline](docs/upload-pipeline.md), [validator](docs/validator.md), [Windows Companion](docs/windows-companion.md), [Apple signing research](docs/apple-signing.md), [physical iPhone install test](docs/physical-device-install-test.md), [TrollStore handoff test](docs/physical-device-trollstore-test.md), [security](docs/security.md), [installation](docs/installation.md), [licenses](docs/licenses.md), and [deployment boundaries](docs/deployment.md).
 
 ## Requirements
 
 - Node.js 22.12+ and npm.
 - Python 3 for package validation and migration checks.
-- macOS and Xcode for a local iOS build; public GitHub Actions runs the simulator build on macOS.
+- macOS and Xcode for a local iOS build; public GitHub Actions runs XCTest and builds unsigned iOS and device-test artifacts on macOS.
 - Windows 11, Node.js, Rust MSVC, Visual Studio C++ build tools and Python to build the Windows Companion and its pinned `zsign` sidecar. `pymobiledevice3` and Apple's classic iTunes Apple Mobile Device Service are installed separately on the local PC.
 - Cloudflare credentials are not needed for local catalog development or tests. Production resources are not created by setup or CI.
 
@@ -56,11 +58,11 @@ xcodebuild test -project ios/DreyzeStore/DreyzeStore.xcodeproj -scheme DreyzeSto
   -destination 'platform=iOS Simulator,name=<available iPhone>' CODE_SIGNING_ALLOWED=NO
 ```
 
-The Debug configuration targets `http://127.0.0.1:8787/api/v1`. Release configuration remains pointed at a reserved `.invalid` host until an operator configures an approved public endpoint.
+The Debug configuration targets `http://127.0.0.1:8787/api/v1`. Release requires an operator-supplied HTTPS API URL through `DREYZE_API_BASE_URL`; the checked-in `.invalid` value is intentionally nonfunctional. CI does not sign or create an installable IPA. See [getting started](docs/getting-started.md).
 
 ## Windows Companion
 
-See [Windows Companion setup and signing boundaries](docs/windows-companion.md). The Companion installer is unsigned and development-only, and does not bundle Apple credentials or a device service. The local signing flow requires an Apple Development identity and device-matched profile supplied by the user; Windows Companion does not automate Apple's account or Personal Team provisioning flow. Use [the physical iPhone test plan](docs/physical-device-install-test.md) to run real diagnostics and a test install; hardware verification has not yet been performed.
+See [Windows Companion setup and signing boundaries](docs/windows-companion.md). The Companion RC installer is unsigned and does not bundle Apple credentials or a device service. Local signing requires the user's Apple Development identity and device-matched profile; Windows Companion does not automate Apple Account or Personal Team provisioning. Use [the physical iPhone test plan](docs/physical-device-install-test.md) and the CI-generated `DreyzeDeviceTest-sample.ipa` to run diagnostics and a test install; hardware verification has not yet been performed.
 
 ## Security and release rights
 

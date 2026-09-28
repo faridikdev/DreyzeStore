@@ -2,6 +2,8 @@
 
 Signing refresh renews the installed app's local development signature using the original DreyzeStore-managed package retained by Windows Companion. It does not fetch a newer app release and does not change the app version or build.
 
+This flow still requires a live Companion inventory and the actual profile expiry; stale snapshots cannot start refresh. RC documentation does not treat simulated expiry or mock-device tests as physical validation.
+
 ## Eligibility
 
 Refresh is available only for an app marked `companionConfirmed` in a fresh inventory from the currently paired iPhone and when Windows Companion is connected with a valid local signing setup. `localRecordOnly`, `unknown`, and stale cached inventory never authorize refresh.

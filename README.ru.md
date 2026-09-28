@@ -2,7 +2,7 @@
 
 [English](README.md) · **Русский**
 
-DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 7 добавляет подтверждённый Companion inventory, поиск опубликованных обновлений, проверенную установку обновлений, refresh подписи и локальную историю.**
+DreyzeStore 0.9.0 RC1 — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 8 сосредоточена на первом запуске, восстановлении, подготовке release candidate и физическом тестировании.**
 
 iOS-клиент скачивает опубликованные пакеты и проверяет SHA-256 и структуру IPA. На обычной iOS он может спариться с Windows Companion через локальное TLS-соединение с закреплённым сертификатом. Windows повторно проверяет пакет, подписывает локально импортованной Apple Development identity, устанавливает через доверенный USB-сервис устройства и подтверждает точные bundle ID/version/build по inventory. Только после этого интерфейс сообщает **Installed**. Apple Account/2FA и автоматическое создание Personal Team профиля не реализованы: Apple документирует этот путь через Xcode на Mac. Локальный Test Installation принимает только собственные/разрешённые тестовые приложения с bundle ID `org.dreyzestore.test.*`. Установка на физическом iPhone пока **НЕ ПРОВЕРЕНА**. Передача в TrollStore остаётся отдельным необязательным путём для совместимых сред и сообщает **Handed Off**, а не **Installed**.
 
@@ -17,13 +17,15 @@ iOS-клиент скачивает опубликованные пакеты и
 - `scripts/validate_ipa.py` — изолированный ограниченный валидатор IPA, запускаемый workflow GitHub Actions.
 - `.github/workflows/ci.yml` — проверки backend/admin, macOS-сборка iOS Simulator и Windows-тесты/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — проверка выбранной загрузки с аутентификацией OIDC.
 
+См. [первый запуск](docs/getting-started.md), [устранение неполадок](docs/troubleshooting.md), [конфиденциальность](docs/privacy.md) и [матрицу тестирования RC](docs/release-test-matrix.md). CI собирает unsigned iOS-артефакт и динамически создаваемую разрешённую тестовую IPA, а также unsigned NSIS/MSI с SHA-256 manifest. **Установка на физическом iPhone пока НЕ ПРОВЕРЕНА.**
+
 Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [обновления](docs/updates.md), [refresh подписи](docs/refresh.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [исследование Apple signing](docs/apple-signing.md), [физическая проверка iPhone](docs/physical-device-install-test.md), [TrollStore handoff](docs/physical-device-trollstore-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
 
 ## Требования
 
 - Node.js 22.12+ и npm.
 - Python 3 для проверки IPA и D1 migrations.
-- macOS и Xcode для локальной iOS-сборки; публичный GitHub Actions workflow использует macOS runner.
+- macOS и Xcode для локальной iOS-сборки; GitHub Actions запускает XCTest и собирает unsigned iOS/test IPA на macOS runner.
 - Windows 11, Node.js, Rust MSVC, Visual Studio C++ Build Tools и Python для сборки Companion и закреплённого `zsign`. `pymobiledevice3` и Apple Mobile Device Service из классического iTunes устанавливаются отдельно на локальный компьютер.
 - Cloudflare credentials не нужны для локального каталога и тестов. Production-ресурсы автоматически не создаются.
 
@@ -56,11 +58,11 @@ xcodebuild test -project ios/DreyzeStore/DreyzeStore.xcodeproj -scheme DreyzeSto
   -destination 'platform=iOS Simulator,name=<available iPhone>' CODE_SIGNING_ALLOWED=NO
 ```
 
-Debug-конфигурация использует `http://127.0.0.1:8787/api/v1`. Release пока указывает на зарезервированный `.invalid`, пока оператор не настроит одобренный публичный endpoint.
+Debug-конфигурация использует `http://127.0.0.1:8787/api/v1`. Для Release оператор должен задать HTTPS API URL через `DREYZE_API_BASE_URL`; `.invalid` в репозитории намеренно не работает. CI не подписывает приложение и не выпускает installable IPA. См. [первый запуск](docs/getting-started.md).
 
 ## Windows Companion
 
-См. [настройку и границы signing](docs/windows-companion.md). Companion installer не подписан и предназначен для разработки; Apple credentials и device service в пакет не входят. Для локальной подписи нужны предоставленные пользователем Apple Development identity и provisioning profile, включающий целевой iPhone. Companion не автоматизирует Apple Account или Personal Team provisioning. Запусти [план физической проверки iPhone](docs/physical-device-install-test.md); установка на реальном устройстве пока не проверена.
+См. [настройку и ограничения signing](docs/windows-companion.md). RC installer не подписан; Apple credentials и device service в пакет не входят. Для локальной подписи нужны собственные Apple Development identity и профиль с целевым iPhone. Companion не автоматизирует Apple Account или Personal Team provisioning. Используй [план физической проверки iPhone](docs/physical-device-install-test.md) и созданную в CI `DreyzeDeviceTest-sample.ipa`; установка на реальном устройстве пока не проверена.
 
 ## Безопасность и права на релизы
 

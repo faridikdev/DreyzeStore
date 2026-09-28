@@ -1,6 +1,6 @@
 # Updates and installed inventory
 
-Phase 7 uses the paired Windows Companion's current device inventory as the only source of truth for installed versions. A downloaded IPA, a prior handoff, or a published catalog release never marks an app as installed.
+Phase 7 uses the paired Windows Companion's current device inventory as the only source of truth for installed versions. A downloaded IPA, a prior handoff, or a published catalog release never marks an app as installed. Phase 8 preserves this boundary while improving first-run guidance and recovery after app restart.
 
 ## Inventory
 

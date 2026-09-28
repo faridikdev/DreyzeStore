@@ -1,6 +1,6 @@
 # Deployment boundaries
 
-**PHASE 6 does not deploy the Worker or Admin, create Cloudflare resources, configure DNS, or set production secrets.** `backend/wrangler.jsonc` is prepared for bindings but uses a placeholder D1 ID and local bucket names. `npm run build --workspace @dreyzestore/api` performs Wrangler `--dry-run` bundling only.
+**Phase 8 does not deploy the Worker or Admin, create Cloudflare resources, configure DNS, or set production secrets.** `backend/wrangler.jsonc` is prepared for bindings but uses a placeholder D1 ID and local bucket names. `npm run build --workspace @dreyzestore/api` performs Wrangler `--dry-run` bundling only. The `0.9.0 RC1` iOS build has a deliberately nonfunctional `.invalid` release API URL until an operator supplies an approved HTTPS endpoint.
 
 ## Required bindings and configuration
 
