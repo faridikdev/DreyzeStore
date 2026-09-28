@@ -122,7 +122,7 @@ struct AppDetailsView: View {
                 installedBuild: record.build
             ) ? "UPDATE" : "INSTALLED"
         }
-        switch downloadManager.state(for: app) {
+        return switch downloadManager.state(for: app) {
         case .preparing, .downloading: "DOWNLOADING"
         case .verifying: "VERIFYING"
         case .inspecting: "INSPECTING"
@@ -133,7 +133,7 @@ struct AppDetailsView: View {
     }
 
     private func actionSymbol(for app: StoreApp) -> String {
-        switch downloadTitle(for: app) {
+        return switch downloadTitle(for: app) {
         case "UPDATE": "arrow.clockwise"
         case "INSTALLED": "checkmark"
         case "CHECK STATUS": "arrow.clockwise"
@@ -143,7 +143,7 @@ struct AppDetailsView: View {
     }
 
     private func actionHint(for app: StoreApp) -> String {
-        switch downloadTitle(for: app) {
+        return switch downloadTitle(for: app) {
         case "UPDATE": "Downloads and verifies the newer release, then offers installation through a ready Windows Companion."
         case "INSTALLED": "Windows Companion confirmed this installed version from the connected iPhone."
         case "CHECK STATUS": "Refreshes the saved Companion inventory before offering installation actions."
