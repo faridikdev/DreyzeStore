@@ -22,3 +22,23 @@ The device service is an optional user-installed dependency and is not bundled
 or modified by DreyzeStore. Upstream is licensed under GNU GPL v3.0. Users install
 it separately along with the classic iTunes Apple Mobile Device Service.
 https://github.com/doronz88/pymobiledevice3
+
+isideload
+The local experimental Apple Account provisioning integration links isideload
+0.4.0 from https://github.com/nab138/isideload at commit
+52b504c2cd706a9e415109b0be9e137168034f5e. Upstream license metadata is MIT;
+the MIT notice is included in isideload-MIT.txt. No upstream source was copied.
+
+isideload-apple-codesign
+The integration links isideload-apple-codesign 0.29.11 from
+https://github.com/nab138/isideload-apple-platform-rs at commit
+3100109c6a967375dec78f018be5f4a42cd1bdd9. License: MPL-2.0. Its license is
+included in isideload-apple-codesign-MPL-2.0.txt. No source was copied.
+
+apple-codesign-quick
+The transitive Rust dependency apple-codesign-quick 0.1.0 is from
+https://github.com/Dadoum/apple-crates and declares LGPL-2.1-or-later. The
+license text is included in apple-codesign-quick-LGPL-2.1.txt. The dependency is
+linked into the Rust Companion. Before distributing a linked binary, provide
+the applicable library source and relinkable object/build materials and review
+all LGPL obligations for the chosen release format.

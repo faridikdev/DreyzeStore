@@ -431,7 +431,7 @@ async fn install(State(state): State<ApiState>, headers: HeaderMap, body: Body) 
                 }
                 let record = InstallRecord {
                     bundle_identifier: expected.bundle_identifier.clone(),
-                    signed_bundle_identifier: expected.bundle_identifier.clone(),
+                    signed_bundle_identifier: signing_info.bundle_identifier.clone(),
                     version: expected.version.clone(),
                     build: expected.build.clone(),
                     minimum_os_version: expected.minimum_os_version.clone(),

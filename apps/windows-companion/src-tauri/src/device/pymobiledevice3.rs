@@ -52,7 +52,10 @@ impl Pymobiledevice3Provider {
                     .map(CommandSpec::Executable)
             })
             .or_else(|| {
-                find_on_path(&["py.exe", "python.exe", "python"]).map(CommandSpec::PythonModule)
+                // Prefer the interpreter selected by `python` on PATH. The Windows
+                // launcher (`py.exe`) can point at a different Python installation,
+                // where pymobiledevice3 may not be installed.
+                find_python_on_path().map(CommandSpec::PythonModule)
             });
         Self {
             command,
@@ -141,6 +144,45 @@ impl DeviceProvider for Pymobiledevice3Provider {
 
     async fn install(&self, udid: &str, package: &std::path::Path) -> Result<()> {
         validate_udid(udid)?;
+        if package.is_dir() {
+            let name = package
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if !name.ends_with(".app") {
+                return Err(CompanionError::InvalidPackage(
+                    "signed directory must be an app bundle".into(),
+                ));
+            }
+            let address = idevice::usbmuxd::UsbmuxdAddr::from_env_var()
+                .map_err(|error| CompanionError::DeviceServiceUnavailable(error.to_string()))?;
+            let mut mux = timeout(
+                COMMAND_TIMEOUT,
+                idevice::usbmuxd::UsbmuxdConnection::default(),
+            )
+            .await
+            .map_err(|_| CompanionError::Operation("Apple USB device service timed out".into()))?
+            .map_err(|error| CompanionError::DeviceServiceUnavailable(error.to_string()))?;
+            let devices = mux
+                .get_devices()
+                .await
+                .map_err(|error| CompanionError::DeviceServiceUnavailable(error.to_string()))?;
+            let device = devices
+                .into_iter()
+                .find(|device| device.udid.eq_ignore_ascii_case(udid))
+                .ok_or(CompanionError::DeviceUnavailable)?;
+            let provider = device.to_provider(address, "DreyzeStore Companion");
+            timeout(
+                COMMAND_TIMEOUT,
+                idevice::utils::installation::install_package(&provider, package, None),
+            )
+            .await
+            .map_err(|_| CompanionError::Operation("signed app transfer timed out".into()))?
+            .map_err(|error| {
+                CompanionError::Operation(format!("signed app install failed: {error}"))
+            })?;
+            return Ok(());
+        }
         if !package.is_file() || package.extension().and_then(|ext| ext.to_str()) != Some("ipa") {
             return Err(CompanionError::InvalidPackage(
                 "install input must be a managed IPA file".into(),
@@ -180,13 +222,26 @@ fn find_on_path(names: &[&str]) -> Option<PathBuf> {
         .into_iter()
         .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
         .collect();
-    directories
+    find_in_directories(&directories, names)
+}
+
+fn find_python_on_path() -> Option<PathBuf> {
+    let directories: Vec<PathBuf> = std::env::var_os("PATH")
         .into_iter()
-        .flat_map(|directory| {
-            names
-                .iter()
-                .map(move |name| directory.join(name).to_owned())
-        })
+        .flat_map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .collect();
+    find_python_in_directories(&directories)
+}
+
+fn find_python_in_directories(directories: &[PathBuf]) -> Option<PathBuf> {
+    find_in_directories(directories, &["python.exe", "python"])
+        .or_else(|| find_in_directories(&directories, &["py.exe"]))
+}
+
+fn find_in_directories(directories: &[PathBuf], names: &[&str]) -> Option<PathBuf> {
+    directories
+        .iter()
+        .flat_map(|directory| names.iter().map(move |name| directory.join(name)))
         .find(|path| path.is_file())
 }
 

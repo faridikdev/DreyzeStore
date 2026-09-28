@@ -12,6 +12,8 @@ The client keeps recent searches, user preferences, cached catalog responses, ca
 
 The Companion keeps local installation records, diagnostic state and its local TLS service identity on the PC. Imported development certificate/profile material is protected locally using Windows DPAPI; the P12 password is stored in Windows Credential Manager. The Companion must access the USB-connected iPhone and the user's local signing files to sign/install apps.
 
+The experimental Windows Apple Account feature sends Apple Account authentication directly through the local upstream `isideload` client to Apple. Password is not persisted; a one-use 2FA value is not saved. Reusable Apple session data, account display metadata, selected anisette endpoint, Anisette/ADI state, and local signing-key storage remain in the current Windows user's Credential Manager. A user-selected anisette provider receives protocol/ADI data required for that flow, but DreyzeStore does not send it the Apple email, password, 2FA code, or reusable session token. Apple does not document or support this Windows Personal Team workflow. See [Anisette](anisette.md), [Apple auth security](apple-auth-security.md), and the [threat model](../DreyzeStore-threat-model.md).
+
 When paired, iPhone and Companion exchange device readiness, installed bundle IDs/versions/builds, signing expiry metadata and installation requests over the pinned local HTTPS connection. Pairing is explicit and can be removed in the iOS Companion settings and Windows Companion UI.
 
 ## Backend and admin
@@ -21,6 +23,7 @@ The public API stores and returns published catalog metadata, release metadata, 
 ## Never sent to the DreyzeStore catalog backend
 
 - Apple Account password or 2FA code.
+- Apple session token/ADSID or Anisette/ADI data.
 - Private signing keys, P12 password, Apple development certificate private key, or provisioning profile contents.
 - Companion pairing token, local TLS private key, or local Windows credential-store values.
 - Full installed-app inventory. Inventory stays between the paired iPhone and the Windows Companion; the iOS app sends only the canonical bundle/version/build/channel items needed to query public updates.

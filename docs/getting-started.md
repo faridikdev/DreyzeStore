@@ -32,7 +32,7 @@ For an iPhone, build an HTTPS development endpoint reachable by the phone and co
 6. Use the CI-generated `DreyzeDeviceTest-sample.ipa` from the same run for the first non-destructive install test. The package is built from [the sample source](../ios/DeviceTestSample) and is not committed.
 7. Read [the physical-device test plan](physical-device-install-test.md) before attempting install, update, refresh, or uninstall.
 
-The current CI artifact is not signed with an Apple identity. An install requires signing material you own and a matching profile. The project does not automate Apple Account/Personal Team provisioning. See [Apple signing limitations](apple-signing.md).
+The current CI artifact is not signed with an Apple identity. Companion now includes an experimental Windows Apple Account provisioning flow, but Apple's acceptance and physical installation have not been tested; it is not an Apple-supported Windows workflow. You can also import signing material you own and a matching profile. See [Apple signing and provisioning limits](apple-signing.md) before entering credentials.
 
 ## iOS build
 

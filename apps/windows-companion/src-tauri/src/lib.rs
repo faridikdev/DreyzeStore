@@ -20,6 +20,13 @@ use security::{
 };
 use serde::Serialize;
 use signing::zsign::SigningProvider;
+use signing::{
+    CompositeSigningProvider,
+    apple_account::{
+        AppleAccountProvisioningProvider, AppleAccountStatus, AppleTeamSummary,
+        IsideloadAppleAccountProvider, TwoFactorAction,
+    },
+};
 use std::{path::PathBuf, sync::Arc};
 use tauri::{Manager, State};
 use tokio::sync::RwLock;
@@ -32,7 +39,8 @@ struct CompanionState {
     devices: Arc<Pymobiledevice3Provider>,
     coordinator: Arc<PackageInstallCoordinator>,
     jobs: InstallJobStore,
-    signer: Arc<signing::zsign::AppleDevelopmentSigningProvider>,
+    signer: Arc<CompositeSigningProvider>,
+    apple_account: Arc<IsideloadAppleAccountProvider>,
     server_info: Arc<RwLock<Option<server::PairingServerInfo>>>,
     server_error: Arc<RwLock<Option<String>>>,
 }
@@ -117,6 +125,129 @@ async fn get_dashboard_snapshot(
         local_endpoint: endpoint,
         api_error,
     })
+}
+
+#[tauri::command]
+fn get_apple_account_status(state: State<'_, CompanionState>) -> AppleAccountStatus {
+    AppleAccountProvisioningProvider::status(&*state.apple_account)
+}
+
+#[tauri::command]
+async fn begin_apple_account_login(
+    app: tauri::AppHandle,
+    state: State<'_, CompanionState>,
+    email: String,
+    password: String,
+    anisette_url: String,
+    anisette_trust_confirmed: bool,
+) -> Result<AppleAccountStatus, String> {
+    let password = Zeroizing::new(password);
+    state.apple_account
+        .authenticate(app, email, password, anisette_url, anisette_trust_confirmed)
+        .await
+        .map_err(|_| "Apple Account authentication failed. Recheck the account and verification code, then retry.".to_owned())
+}
+
+#[tauri::command]
+async fn submit_apple_two_factor(
+    state: State<'_, CompanionState>,
+    action: String,
+    code: Option<String>,
+    number_id: Option<u32>,
+) -> Result<(), String> {
+    let action = match action.as_str() {
+        "submitCode" => TwoFactorAction::SubmitCode(Zeroizing::new(code.unwrap_or_default())),
+        "sendSms" => TwoFactorAction::SendSms(
+            number_id.ok_or_else(|| "Choose a trusted phone number.".to_owned())?,
+        ),
+        "sendToDevices" => TwoFactorAction::SendToDevices,
+        "resendCode" => TwoFactorAction::ResendCode,
+        "cancel" => TwoFactorAction::Cancel,
+        _ => return Err("Unsupported verification action.".into()),
+    };
+    state
+        .apple_account
+        .submit_two_factor(action)
+        .await
+        .map_err(|_| "The Apple verification request expired. Start sign-in again.".to_owned())
+}
+
+#[tauri::command]
+async fn list_apple_teams(
+    state: State<'_, CompanionState>,
+) -> Result<Vec<AppleTeamSummary>, String> {
+    state
+        .apple_account
+        .list_teams()
+        .await
+        .map_err(|_| "Could not load Apple development teams. Reauthenticate and retry.".to_owned())
+}
+
+#[tauri::command]
+async fn select_apple_team(
+    state: State<'_, CompanionState>,
+    team_id: String,
+) -> Result<AppleAccountStatus, String> {
+    state
+        .apple_account
+        .select_team(&team_id)
+        .await
+        .map_err(|_| "Choose a team returned by Apple for this account.".to_owned())
+}
+
+#[tauri::command]
+async fn register_apple_device(
+    state: State<'_, CompanionState>,
+    team_id: String,
+    udid: String,
+    confirmed: bool,
+) -> Result<(), String> {
+    if !confirmed {
+        return Err("Confirm registering this iPhone with the selected Apple team.".into());
+    }
+    let device = state
+        .devices
+        .discover()
+        .await
+        .map_err(|_| "Connect and trust the iPhone before registering it.".to_owned())?
+        .into_iter()
+        .find(|device| device.udid.eq_ignore_ascii_case(&udid) && device.trusted)
+        .ok_or_else(|| "The selected trusted iPhone is no longer connected.".to_owned())?;
+    if device.developer_mode == Some(false) {
+        return Err("Enable Developer Mode on the iPhone, then reconnect it.".into());
+    }
+    state
+        .apple_account
+        .register_device(&team_id, &device.name, &device.udid, true)
+        .await
+        .map_err(|_| {
+            "Apple could not register this iPhone. Check the team device limit and retry."
+                .to_owned()
+        })
+}
+
+#[tauri::command]
+fn is_apple_device_registered(state: State<'_, CompanionState>, udid: String) -> bool {
+    state.apple_account.is_device_registered(&udid)
+}
+
+#[tauri::command]
+async fn prepare_apple_signing_certificate(
+    state: State<'_, CompanionState>,
+    udid: String,
+) -> Result<SigningStatus, String> {
+    state.apple_account.prepare_signing_certificate(&udid).await
+        .map_err(|_| "Apple could not create the development certificate. Check your team limits; no existing certificate was revoked.".to_owned())?;
+    Ok(state.signer.status())
+}
+
+#[tauri::command]
+async fn sign_out_apple_account(state: State<'_, CompanionState>) -> Result<(), String> {
+    state
+        .apple_account
+        .sign_out()
+        .await
+        .map_err(|_| "Could not remove the local Apple session.".to_owned())
 }
 
 #[tauri::command]
@@ -589,6 +720,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_dashboard_snapshot,
+            get_apple_account_status,
+            begin_apple_account_login,
+            submit_apple_two_factor,
+            list_apple_teams,
+            select_apple_team,
+            register_apple_device,
+            is_apple_device_registered,
+            prepare_apple_signing_certificate,
+            sign_out_apple_account,
             get_device_readiness,
             inspect_test_package,
             run_test_installation,
@@ -611,12 +751,19 @@ pub fn run() {
             let devices = Arc::new(Pymobiledevice3Provider::discover_executable());
             let jobs = InstallJobStore::default();
             let vault = SigningIdentityVault::new(data_dir.join("signing"));
-            let signer = Arc::new(
+            let imported_signer = Arc::new(
                 signing::zsign::AppleDevelopmentSigningProvider::from_current_executable(
                     vault,
                     data_dir.join("packages"),
                 ),
             );
+            let apple_account = Arc::new(IsideloadAppleAccountProvider::new(
+                data_dir.join("packages"),
+            ));
+            let signer = Arc::new(CompositeSigningProvider::new(
+                imported_signer,
+                apple_account.clone(),
+            ));
             let coordinator = Arc::new(PackageInstallCoordinator::new(
                 devices.clone(),
                 signer.clone(),
@@ -631,6 +778,7 @@ pub fn run() {
                 coordinator: coordinator.clone(),
                 jobs: jobs.clone(),
                 signer: signer.clone(),
+                apple_account: apple_account.clone(),
                 server_info: server_info.clone(),
                 server_error: server_error.clone(),
             };

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -46,6 +47,22 @@ type DeviceReadiness = {
   signingIdentity: ReadinessCheck;
   provisioning: ReadinessCheck;
   dreyzePairing: ReadinessCheck;
+};
+type AppleTeam = { teamId: string; name: string; teamType: string };
+type AppleAccountStatus = {
+  connected: boolean;
+  email?: string | null;
+  selectedTeamId?: string | null;
+  anisetteUrl?: string | null;
+  state: string;
+  limitation?: string | null;
+};
+type TwoFactorChallenge = {
+  retryMessage?: string | null;
+  unknown: boolean;
+  sms: boolean;
+  numbers: { id: number; lastTwoDigits: string }[];
+  selectedNumberId?: number | null;
 };
 type TestPackageMetadata = {
   bundleIdentifier: string;
@@ -135,7 +152,7 @@ export default function App() {
 
   useEffect(() => {
     void getVersion()
-      .then((version) => setAppVersion(version === "0.9.0-1" ? "0.9.0 RC1" : version))
+      .then((version) => setAppVersion(({ "0.9.0-1": "0.9.0 RC1", "0.9.0-2": "0.9.0 RC2" } as Record<string, string>)[version] ?? version))
       .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 30000);
@@ -264,6 +281,7 @@ export default function App() {
           snapshot={snapshot}
           offer={offer}
           busy={busy}
+          onRefresh={refresh}
           onPair={createPairing}
           onForget={forgetPhone}
           onCopy={async (value) => { await navigator.clipboard.writeText(value); setNotice("Copied to clipboard."); }}
@@ -344,18 +362,29 @@ function Overview({ snapshot, history, onConnect, onSigning, onPair, busy }: {
   </div>;
 }
 
-function Setup({ snapshot, offer, busy, onPair, onForget, onCopy }: {
-  snapshot: Snapshot | null; offer: PairingOffer | null; busy: boolean; onPair: () => void; onForget: () => void; onCopy: (value: string) => void;
+function Setup({ snapshot, offer, busy, onRefresh, onPair, onForget, onCopy }: {
+  snapshot: Snapshot | null; offer: PairingOffer | null; busy: boolean; onRefresh: () => Promise<void>; onPair: () => void; onForget: () => void; onCopy: (value: string) => void;
 }) {
   const device = snapshot?.devices[0];
   return <div className="page-content narrow-content">
-    <div className="page-heading"><div><div className="eyebrow">FIRST-TIME SETUP</div><h1>Connect your iPhone.</h1><p>These steps are required by iOS and can’t be completed silently by the companion.</p></div></div>
+    <div className="page-heading"><div><div className="eyebrow">FIRST-TIME SETUP</div><h1>Connect your iPhone.</h1><p>These steps are required by iOS and can’t be completed silently by the companion.</p></div><button className="secondary-button" onClick={() => void onRefresh()}><RefreshCw size={15} /> Check connection</button></div>
+    <div className={`device-detection ${device ? "connected" : snapshot?.deviceServiceError ? "unavailable" : ""}`} role="status" aria-live="polite">
+      <div className="device-detection-icon">{device ? <Check size={17} /> : snapshot?.deviceServiceError ? <AlertTriangle size={17} /> : <Usb size={17} />}</div>
+      <div className="device-detection-copy">
+        <strong>{device ? `${device.name} detected` : snapshot?.deviceServiceError ? "Couldn’t check for an iPhone" : snapshot ? "Waiting for a trusted iPhone" : "Checking for an iPhone…"}</strong>
+        <span>{device
+          ? [device.productType, device.productVersion ? `iOS ${device.productVersion}` : null].filter(Boolean).join(" · ") || "Connected over USB"
+          : snapshot?.deviceServiceError
+            ? "The Apple device bridge failed. Open Apple Signing → Run Diagnostics to see the specific cause."
+            : "Unlock the iPhone and accept Trust This Computer. Then check the connection again."}</span>
+      </div>
+    </div>
     <div className="wizard-card">
-      <SetupStep number="01" icon={<Usb size={17} />} title="Connect over USB" detail="Use a data cable, unlock the iPhone, then tap Trust This Computer when prompted." done={Boolean(device)} />
-      <SetupStep number="02" icon={<Smartphone size={17} />} title="Enable Developer Mode" detail="On the iPhone open Settings → Privacy & Security → Developer Mode. Confirm the restart and passcode prompt." done={device?.developerMode === true} />
-      <SetupStep number="03" icon={<FileKey2 size={17} />} title="Add a signing identity" detail="Import an Apple Development .p12 and a profile that includes this iPhone’s UDID and the app bundle identifier." done={snapshot?.signing.configured ?? false} />
-      <SetupStep number="04" icon={<Link2 size={17} />} title="Pair DreyzeStore" detail="Scan the one-time QR code from DreyzeStore on iPhone → Settings → Connect Computer." done={snapshot?.paired ?? false} />
-      <SetupStep number="05" icon={<Check size={17} />} title="Test the local connection" detail={snapshot?.pairedPhoneLastSeenAt ? `The paired iPhone last reached this PC ${formatDate(snapshot.pairedPhoneLastSeenAt)}.` : "After pairing, DreyzeStore checks device and signing status through this local connection."} done={Boolean(snapshot?.pairedPhoneLastSeenAt)} last />
+      <SetupStep number="01" icon={<Usb size={17} />} title="Connect over USB" detail="Use a data cable, unlock the iPhone, then tap Trust This Computer when prompted." state={device ? "complete" : "pending"} />
+      <SetupStep number="02" icon={<Smartphone size={17} />} title="Enable Developer Mode" detail={device?.developerMode === false ? "Developer Mode is reported off. Enable it in Settings → Privacy & Security → Developer Mode." : "Companion can’t read this setting reliably. Check Settings → Privacy & Security → Developer Mode directly; an unknown status does not mean it is off."} state={device?.developerMode === true ? "complete" : device?.developerMode === false ? "pending" : "unknown"} />
+      <SetupStep number="03" icon={<FileKey2 size={17} />} title="Add a signing identity" detail="Import an Apple Development .p12 and a profile that includes this iPhone’s UDID and the app bundle identifier." state={snapshot?.signing.configured ? "complete" : "pending"} />
+      <SetupStep number="04" icon={<Link2 size={17} />} title="Pair DreyzeStore" detail="Scan the one-time QR code from DreyzeStore on iPhone → Settings → Connect Computer." state={snapshot?.paired ? "complete" : "pending"} />
+      <SetupStep number="05" icon={<Check size={17} />} title="Test the local connection" detail={snapshot?.pairedPhoneLastSeenAt ? `The paired iPhone last reached this PC ${formatDate(snapshot.pairedPhoneLastSeenAt)}.` : "After pairing, DreyzeStore checks device and signing status through this local connection."} state={snapshot?.pairedPhoneLastSeenAt ? "complete" : "pending"} last />
     </div>
     <div className="pair-card">
       <div className="pair-card-copy"><div className="eyebrow">PAIR THIS PHONE</div><h2>{snapshot?.paired ? "A phone is paired" : "Create a one-time code"}</h2><p>Only the phone holding the pairing token can call this companion. The token is stored in iOS Keychain and Windows Credential Manager.</p>
@@ -363,7 +392,9 @@ function Setup({ snapshot, offer, busy, onPair, onForget, onCopy }: {
       </div>
       {offer && <div className="pair-code-panel"><div className="qr-surface"><QRCodeSVG value={offer.payload} size={184} bgColor="#ffffff" fgColor="#1a2230" level="M" includeMargin /></div><div className="pair-code-label">ONE-TIME CODE</div><div className="pair-code">{offer.code}</div><div className="pair-expiry">Expires {new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date(offer.expiresAt))}</div><button className="copy-button" onClick={() => onCopy(offer.code)}><Copy size={14} /> Copy code</button></div>}
     </div>
-    <div className="notice-card"><Usb size={17} /><p><strong>Windows device prerequisites.</strong> Companion uses the classic iTunes installer’s Apple Mobile Device Service and the separately installed <code>pymobiledevice3</code> command. It does not bundle that GPL-licensed device service. Install the classic iTunes package and run <code>python -m pip install -U pymobiledevice3</code>, then restart Companion.</p></div>
+    {snapshot?.deviceServiceAvailable
+      ? <div className="notice-card"><Usb size={17} /><p><strong>USB device bridge is responding.</strong> If the iPhone is not listed above, unlock it, accept Trust This Computer, then use Check connection. Developer Mode status is checked on the iPhone because the USB bridge does not report it.</p></div>
+      : <div className="notice-card"><Usb size={17} /><p><strong>Windows device prerequisites.</strong> Companion uses the classic iTunes installer’s Apple Mobile Device Service and the separately installed <code>pymobiledevice3</code> command. It does not bundle that GPL-licensed device service. Install the classic iTunes package and run <code>python -m pip install -U pymobiledevice3</code>, then restart Companion.</p></div>}
     <div className="notice-card"><ShieldCheck size={17} /><p><strong>Local trust boundary.</strong> This API binds only to the selected private LAN address, uses a certificate pin shown in the QR, requires a one-time pairing code, and rejects timestamped request replays. Don’t share the QR code.</p></div>
   </div>;
 }
@@ -384,6 +415,135 @@ function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstalla
   const [profilePath, setProfilePath] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [appleEmail, setAppleEmail] = useState("");
+  const [applePassword, setApplePassword] = useState("");
+  const [anisetteUrl, setAnisetteUrl] = useState("https://ani.stikstore.app");
+  const [anisetteTrusted, setAnisetteTrusted] = useState(false);
+  const [appleStatus, setAppleStatus] = useState<AppleAccountStatus | null>(null);
+  const [appleTeams, setAppleTeams] = useState<AppleTeam[]>([]);
+  const [appleBusy, setAppleBusy] = useState(false);
+  const [forceAppleLogin, setForceAppleLogin] = useState(false);
+  const [twoFactor, setTwoFactor] = useState<TwoFactorChallenge | null>(null);
+  const [verificationCode, setVerificationCode] = useState("");
+  const [registeredUdid, setRegisteredUdid] = useState<string | null>(null);
+  const connectedDeviceKey = snapshot?.devices.filter((device) => device.trusted).map((device) => device.udid).join(",") ?? "";
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void listen<TwoFactorChallenge>("apple-account-two-factor", (event) => setTwoFactor(event.payload))
+      .then((stop) => { if (disposed) stop(); else unlisten = stop; });
+    void (async () => {
+      try {
+        const status = await invoke<AppleAccountStatus>("get_apple_account_status");
+        setAppleStatus(status);
+        if (status.connected) {
+          const teams = await invoke<AppleTeam[]>("list_apple_teams");
+          setAppleTeams(teams);
+          if (status.selectedTeamId && teams.some((team) => team.teamId === status.selectedTeamId)) setAppleStatus(status);
+          else if (teams.length === 1) {
+            const selected = await invoke<AppleAccountStatus>("select_apple_team", { teamId: teams[0].teamId });
+            setAppleStatus(selected);
+          }
+        }
+      } catch { /* Offline or expired Apple sessions remain a recoverable UI state. */ }
+    })();
+    return () => { disposed = true; unlisten?.(); };
+  }, []);
+
+  useEffect(() => {
+    const device = snapshot?.devices.find((item) => item.trusted);
+    if (!device || !appleStatus?.connected || !appleStatus.selectedTeamId) { setRegisteredUdid(null); return; }
+    let cancelled = false;
+    void invoke<boolean>("is_apple_device_registered", { udid: device.udid })
+      .then((registered) => { if (!cancelled) setRegisteredUdid(registered ? device.udid : null); })
+      .catch(() => { if (!cancelled) setRegisteredUdid(null); });
+    return () => { cancelled = true; };
+  }, [connectedDeviceKey, appleStatus?.connected, appleStatus?.selectedTeamId]);
+
+  async function refreshAppleAccount() {
+    const status = await invoke<AppleAccountStatus>("get_apple_account_status");
+    setAppleStatus(status);
+    if (status.connected) {
+      const teams = await invoke<AppleTeam[]>("list_apple_teams");
+      setAppleTeams(teams);
+      if (!status.selectedTeamId && teams.length === 1) {
+        setAppleStatus(await invoke<AppleAccountStatus>("select_apple_team", { teamId: teams[0].teamId }));
+      }
+    } else setAppleTeams([]);
+  }
+
+  async function signInWithApple() {
+    if (!appleEmail.trim() || !applePassword || !anisetteTrusted) {
+      onNotice("Enter your Apple Account, choose an anisette endpoint, and confirm that you trust its operator.");
+      return;
+    }
+    setAppleBusy(true);
+    try {
+      const signIn = invoke<AppleAccountStatus>("begin_apple_account_login", {
+        email: appleEmail, password: applePassword, anisetteUrl, anisetteTrustConfirmed: anisetteTrusted,
+      });
+      setApplePassword("");
+      const status = await signIn;
+      setAppleStatus(status);
+      setTwoFactor(null);
+      const teams = await invoke<AppleTeam[]>("list_apple_teams");
+      setAppleTeams(teams);
+      if (teams.length === 1) setAppleStatus(await invoke<AppleAccountStatus>("select_apple_team", { teamId: teams[0].teamId }));
+      setForceAppleLogin(false);
+      onNotice("Apple Account connected locally. Review and select a team, then register your iPhone.");
+    } catch (error) {
+      setApplePassword("");
+      onNotice(userFacingError(error));
+      try { await refreshAppleAccount(); } catch { /* keep current status */ }
+    } finally { setAppleBusy(false); }
+  }
+
+  async function submitTwoFactor(action: string, code?: string, numberId?: number) {
+    try {
+      await invoke("submit_apple_two_factor", { action, code, numberId });
+      setTwoFactor(null);
+      setVerificationCode("");
+    } catch (error) { onNotice(userFacingError(error)); }
+  }
+
+  async function registerDevice(device: Device) {
+    const team = appleTeams.find((item) => item.teamId === appleStatus?.selectedTeamId);
+    if (!team) { onNotice("Choose an Apple development team first."); return; }
+    if (!window.confirm(`Register ${device.name} with team ${team.name} (${team.teamId})? Apple may count this toward the team’s device limit.`)) return;
+    setAppleBusy(true);
+    try {
+      await invoke("register_apple_device", { teamId: team.teamId, udid: device.udid, confirmed: true });
+      setRegisteredUdid(device.udid);
+      onNotice("iPhone registration was confirmed by Apple.");
+      await onChanged();
+    } catch (error) { onNotice(userFacingError(error)); }
+    finally { setAppleBusy(false); }
+  }
+
+  async function prepareAppleCertificate() {
+    if (!registeredUdid) { onNotice("Connect and register a trusted iPhone first."); return; }
+    if (!window.confirm("Create or reuse a development certificate for this Apple team? DreyzeStore will not revoke any existing certificate.")) return;
+    setAppleBusy(true);
+    try {
+      await invoke("prepare_apple_signing_certificate", { udid: registeredUdid });
+      onNotice("The local signing identity is ready. App IDs and provisioning profiles are created or reused when an app is signed.");
+      await onChanged();
+    } catch (error) { onNotice(userFacingError(error)); }
+    finally { setAppleBusy(false); }
+  }
+
+  async function signOutApple() {
+    if (!window.confirm("Sign out on this PC? This removes the saved Apple session but keeps the local private key and does not revoke your certificate or affect installed apps.")) return;
+    setAppleBusy(true);
+    try {
+      await invoke("sign_out_apple_account");
+      setAppleStatus(null); setAppleTeams([]); setRegisteredUdid(null); setApplePassword(""); setForceAppleLogin(false);
+      onNotice("Apple session removed from this PC. The local signing key remains available if you sign in again.");
+      await onChanged();
+    } catch (error) { onNotice(userFacingError(error)); }
+    finally { setAppleBusy(false); }
+  }
 
   async function chooseP12() {
     const value = await open({ multiple: false, filters: [{ name: "PKCS#12 signing identity", extensions: ["p12", "pfx"] }] });
@@ -411,15 +571,43 @@ function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstalla
   }
 
   return <div className="page-content narrow-content">
-    <div className="page-heading"><div><div className="eyebrow">APPLE DEVELOPMENT</div><h1>Signing identity.</h1><p>All signing stays on this computer. DreyzeStore never asks for an Apple ID password or 2FA code.</p></div></div>
-    <div className="signing-hero"><div className="signing-symbol"><FileKey2 size={24} /></div><div><div className="eyebrow">CURRENT STATUS</div><h2>{snapshot?.signing.configured ? "Identity imported" : "No signing identity"}</h2><p>{snapshot?.signing.configured ? snapshot.signing.limitation : "Import an Apple Development certificate and a provisioning profile created for your device."}</p><div className="signing-facts"><span><strong>Team</strong>{snapshot?.signing.teamId ?? "Not reported"}</span><span><strong>Certificate</strong>{snapshot?.signing.certificateExpiresAt ? expirySummary(snapshot.signing.certificateExpiresAt) : "Not reported"}</span><span><strong>Provisioning</strong>{snapshot?.signing.provisioningExpiresAt ? expirySummary(snapshot.signing.provisioningExpiresAt) : "Not reported"}</span></div></div><span className={`status-dot ${snapshot?.signing.configured ? "good" : "muted"}`} /></div>
+    <div className="page-heading"><div><div className="eyebrow">APPLE DEVELOPMENT</div><h1>Signing identity.</h1><p>Apple credentials are processed locally by DreyzeStore Companion. They are never sent to DreyzeStore servers.</p></div></div>
+    <div className="signing-hero"><div className="signing-symbol"><FileKey2 size={24} /></div><div><div className="eyebrow">CURRENT STATUS</div><h2>{appleStatus?.connected ? "Apple Account connected" : snapshot?.signing.configured ? "Signing identity ready" : "Signing setup required"}</h2><p>{appleStatus?.connected ? `${appleStatus.email ?? "Apple Account"}${appleStatus.selectedTeamId ? ` · Team ${appleStatus.selectedTeamId}` : " · Choose a team"}` : snapshot?.signing.limitation ?? "Sign in with an Apple Account or import an existing development identity."}</p><div className="signing-facts"><span><strong>Team</strong>{appleStatus?.selectedTeamId ?? snapshot?.signing.teamId ?? "Not selected"}</span><span><strong>Certificate</strong>{snapshot?.signing.certificateExpiresAt ? expirySummary(snapshot.signing.certificateExpiresAt) : "Not prepared"}</span><span><strong>Device</strong>{registeredUdid ? "Registered" : "Not registered"}</span></div></div><span className={`status-dot ${snapshot?.signing.configured ? "good" : "muted"}`} /></div>
     <section className="form-card onboarding-card">
       <div className="section-title compact"><div><div className="eyebrow">APPLE SIGNING SETUP</div><h2>Choose a supported setup path</h2></div></div>
-      <div className="onboarding-option"><span className="option-badge">A</span><div><strong>Apple Account / Personal Team</strong><p>Apple does not document a Windows Personal Team provisioning flow or API. Use Xcode on a Mac to create the development identity/profile, then import them below. The Companion never collects Apple ID passwords or 2FA codes.</p></div></div>
-      <div className="onboarding-option"><span className="option-badge">B</span><div><strong>Import existing signing files</strong><p>Works with a paid Developer Program team or a Personal Team profile created using Xcode, provided the P12 certificate, App ID, device UDID, and profile match. Apple publishes Team-scoped App Store Connect API endpoints for paid-team provisioning; this Companion does not yet manage API keys or create certificates/profiles.</p></div></div>
+      <div className="onboarding-option"><span className="option-badge">A</span><div><strong>Sign in with Apple Account</strong><p>Windows provisioning uses an unofficial, reverse-engineered Apple service protocol through the open-source isideload library. Apple does not document or support this Windows workflow; account/device eligibility and iOS acceptance can vary.</p></div></div>
+      <div className="onboarding-option"><span className="option-badge">B</span><div><strong>Import existing signing files</strong><p>Advanced fallback for an Apple Development .p12 and matching .mobileprovision. The password remains in Windows Credential Manager and imported files are DPAPI-protected.</p></div></div>
     </section>
-    <div className="form-card">
-      <div className="section-title compact"><div><div className="eyebrow">LOCAL FILES</div><h2>Import certificate & profile</h2></div></div>
+    <section className="form-card apple-account-card">
+      <div className="section-title compact"><div><div className="eyebrow">LOCAL APPLE ACCOUNT</div><h2>{appleStatus?.connected ? "Account and team" : "Connect an Apple Account"}</h2></div>{appleStatus?.connected && <span className="status-pill ok"><i />Connected</span>}</div>
+      {appleStatus?.connected && !forceAppleLogin ? <>
+        <div className="account-summary"><strong>{appleStatus.email}</strong><span>{appleStatus.anisetteUrl ? `Anisette: ${appleStatus.anisetteUrl}` : "Anisette endpoint not reported"}</span></div>
+        {appleTeams.length > 1 && <label className="field-label" htmlFor="apple-team">Development team</label>}
+        {appleTeams.length > 1 && <select id="apple-team" value={appleStatus.selectedTeamId ?? ""} onChange={async (event) => { setAppleBusy(true); try { setAppleStatus(await invoke<AppleAccountStatus>("select_apple_team", { teamId: event.target.value })); } catch (error) { onNotice(userFacingError(error)); } finally { setAppleBusy(false); } }} disabled={appleBusy}>
+          <option value="" disabled>Select a team</option>{appleTeams.map((team) => <option key={team.teamId} value={team.teamId}>{team.name} · {team.teamType} · {team.teamId}</option>)}
+        </select>}
+        {appleStatus.selectedTeamId && <div className="apple-setup-steps">
+          {snapshot?.devices.filter((device) => device.trusted).map((device) => <div className="file-choice" key={device.udid}><div className="file-choice-icon"><Smartphone size={16} /></div><div className="file-choice-copy"><strong>{device.name}</strong><span>{device.productType ?? "iPhone"} · {registeredUdid === device.udid ? "Registered with this team" : device.udid}</span></div>{registeredUdid === device.udid ? <span className="status-pill ok"><i />Registered</span> : <button className="secondary-button small" disabled={appleBusy} onClick={() => void registerDevice(device)}>Register iPhone</button>}</div>)}
+          {registeredUdid && <div className="certificate-action"><div><strong>Development certificate</strong><span>{snapshot?.signing.certificateExpiresAt ? expirySummary(snapshot.signing.certificateExpiresAt) : "Private key stays in Windows Credential Manager."}</span></div><button className="primary-button" disabled={appleBusy} onClick={() => void prepareAppleCertificate()}>{appleBusy ? "Preparing…" : snapshot?.signing.configured ? "Check certificate" : "Prepare signing"}<ChevronRight size={14} /></button></div>}
+        </div>}
+        <div className="form-actions"><button className="secondary-button" disabled={appleBusy} onClick={() => { void refreshAppleAccount(); }}>Refresh teams</button><button className="secondary-button" disabled={appleBusy} onClick={() => setForceAppleLogin(true)}>Reauthenticate</button><button className="danger-text-button" disabled={appleBusy} onClick={() => void signOutApple()}>Sign out</button></div>
+      </> : <>
+        <p className="section-description">Your Apple Account credentials are processed locally by DreyzeStore Companion and are sent directly to Apple for authentication. They are not sent to DreyzeStore servers, Cloudflare, analytics, or the anisette provider.</p>
+        <label className="field-label" htmlFor="apple-email">Apple Account email</label><input id="apple-email" type="email" autoComplete="username" value={appleEmail} onChange={(event) => setAppleEmail(event.target.value)} placeholder="name@example.com" disabled={appleBusy} />
+        <label className="field-label" htmlFor="apple-password">Apple Account password</label><input id="apple-password" type="password" autoComplete="current-password" value={applePassword} onChange={(event) => setApplePassword(event.target.value)} placeholder="Used only for this sign-in" disabled={appleBusy} />
+        <label className="field-label" htmlFor="anisette-url">Anisette v3 HTTPS endpoint</label><input id="anisette-url" type="url" value={anisetteUrl} onChange={(event) => { setAnisetteUrl(event.target.value); setAnisetteTrusted(false); }} disabled={appleBusy} />
+        <div className="form-footnote"><LockKeyhole size={14} /><span>The selected anisette operator receives ADI/an­isette provisioning data required by Apple’s authentication flow. It does not receive your Apple email, password, 2FA code, or reusable Apple session. Choose an operator you trust or your own HTTPS service.</span></div>
+        <label className="trust-checkbox"><input type="checkbox" checked={anisetteTrusted} onChange={(event) => setAnisetteTrusted(event.target.checked)} disabled={appleBusy} /><span>I trust the operator of this anisette endpoint to process ADI/an­isette data.</span></label>
+        {twoFactor && <div className="two-factor-panel" role="dialog" aria-labelledby="two-factor-title"><div><strong id="two-factor-title">Apple verification required</strong><span>Enter the code Apple sent to your trusted device or number. The code is used once and is not saved.</span>{twoFactor.retryMessage && <small>{twoFactor.retryMessage}</small>}</div>
+          <label className="field-label" htmlFor="apple-verification-code">Verification code</label><input id="apple-verification-code" inputMode="numeric" autoComplete="one-time-code" maxLength={10} value={verificationCode} onChange={(event) => setVerificationCode(event.target.value.replace(/\D/g, ""))} />
+          <div className="form-actions"><button className="secondary-button" onClick={() => void submitTwoFactor("cancel")}>Cancel</button>{twoFactor.numbers.map((number) => <button key={number.id} className="secondary-button" onClick={() => void submitTwoFactor("sendSms", undefined, number.id)}>Text ending {number.lastTwoDigits}</button>)}<button className="primary-button" disabled={!verificationCode || appleBusy} onClick={() => void submitTwoFactor("submitCode", verificationCode)}>Verify</button></div>
+          <button className="inline-link" onClick={() => void submitTwoFactor(twoFactor.sms ? "resendCode" : "sendToDevices")}>{twoFactor.sms ? "Resend code" : "Send a code to trusted devices"}</button>
+        </div>}
+        <div className="form-actions"><button className="primary-button" disabled={appleBusy || !anisetteTrusted} onClick={() => void signInWithApple()}>{appleBusy ? "Waiting for Apple…" : "Sign in with Apple Account"}<ChevronRight size={15} /></button></div>
+      </>}
+    </section>
+    <details className="form-card advanced-signing-files">
+      <summary><span><span className="eyebrow">ADVANCED FALLBACK</span><strong>Import existing signing files</strong><small>Use an Apple Development .p12 and a matching device profile.</small></span><ChevronRight size={17} /></summary>
       <FileChoice label="Apple Development identity" detail="Encrypted .p12 or .pfx" value={p12Path} action={chooseP12} />
       <FileChoice label="Provisioning profile" detail="Must include this device’s UDID and matching App ID" value={profilePath} action={chooseProfile} />
       <label className="field-label" htmlFor="p12-password">P12 password</label>
@@ -427,7 +615,7 @@ function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstalla
       <div className="form-footnote"><LockKeyhole size={14} /><span>The encrypted P12 and profile are protected by Windows DPAPI. The password is kept in Windows Credential Manager and sent to the signer through a private stdin pipe, never in process arguments or logs.</span></div>
       <div className="form-actions"><button className="secondary-button" onClick={() => { setPassword(""); setP12Path(""); setProfilePath(""); }}>Clear fields</button><button className="primary-button" onClick={() => void save()} disabled={busy}>{busy ? "Saving…" : "Save signing identity"}<ChevronRight size={15} /></button></div>
       {snapshot?.signing.configured && <button className="danger-text-button remove-identity" onClick={() => void remove()}>Remove saved identity</button>}
-    </div>
+    </details>
     <section className="form-card diagnostics-card">
       <div className="section-title compact"><div><div className="eyebrow">PHYSICAL DEVICE READINESS</div><h2>Device diagnostics</h2></div><button className="secondary-button small" onClick={onDiagnostics} disabled={diagnosing}><RefreshCw size={13} />{diagnosing ? "Checking…" : "Run Diagnostics"}</button></div>
       <p className="section-description">Checks the Windows Apple service, device bridge, USB/trust state, signing material, provisioning, and DreyzeStore pairing. Unknown means the connected device service does not expose that fact.</p>
@@ -456,7 +644,7 @@ function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstalla
         <div className="form-actions"><button className="primary-button" onClick={onTestInstall} disabled={testingInstall}>{testingInstall ? "Working…" : "Choose Test IPA"}<ChevronRight size={15} /></button></div>
       </>}
     </section>
-    <div className="limitations-card"><div className="limitations-title"><AlertTriangle size={16} /><strong>Signing limits</strong></div><ul><li>Apple says Personal Team App IDs, devices, installed-app slots, and development profiles are limited; profiles are valid for 7 days and require reprovisioning. The Companion never promises permanent signing.</li><li>Developer Mode must be enabled by the iPhone owner. Current Windows discovery cannot report it reliably, so diagnostics may show Unknown.</li><li>Only provisioning-profile authorization for the bundle ID, connected device, and matching certificate is checked here. Entitlement rewriting and capability approval are not performed; Apple/device signing checks remain authoritative.</li><li>Expiry is shown from the imported certificate and provisioning profile. Refresh still requires a current valid profile and reinstallation; there is no unattended Apple Account session.</li></ul></div>
+    <div className="limitations-card"><div className="limitations-title"><AlertTriangle size={16} /><strong>Signing limits</strong></div><ul><li>Windows provisioning uses an unofficial reverse-engineered protocol and is not supported by Apple. A mock/test build cannot establish that Apple will accept a real account, team, certificate, profile, or installation. The Companion never promises permanent signing.</li><li>Personal Team limits and profile lifetimes are controlled by Apple and can change. Use the expiration values returned from a real certificate/profile when available; this build does not yet expose per-app profile expiry for its automatic path.</li><li>Developer Mode must be enabled by the iPhone owner. Current Windows discovery cannot report it reliably, so diagnostics may show Unknown.</li><li>Automatic signing fails closed for extensions, universal binaries, DER entitlements, and capabilities outside its narrow allowlist. Apple/device checks remain authoritative.</li><li>Signing out removes local Apple session data; it does not revoke certificates or remove installed apps. Certificate private key material stays in the local Windows credential store.</li></ul></div>
   </div>;
 }
 
@@ -481,8 +669,10 @@ function CheckCard({ icon, title, description, state, action }: { icon: ReactNod
   return <div className="check-card"><div className={`check-icon ${state}`}>{icon}</div><div className="check-copy"><strong>{title}</strong><span>{description}</span>{action && <button className="inline-link" onClick={action}>Configure <ChevronRight size={13} /></button>}</div><div className={`check-mark ${state}`}>{state === "complete" ? <Check size={13} /> : <span />}</div></div>;
 }
 
-function SetupStep({ number, icon, title, detail, done, last = false }: { number: string; icon: ReactNode; title: string; detail: string; done: boolean; last?: boolean }) {
-  return <div className={`setup-step ${last ? "last" : ""}`}><div className={`step-number ${done ? "done" : ""}`}>{done ? <Check size={14} /> : number}</div><div className="step-icon">{icon}</div><div className="step-copy"><strong>{title}</strong><span>{detail}</span></div><StatusPill ok={done} label={done ? "Complete" : "Pending"} /></div>;
+function SetupStep({ number, icon, title, detail, state, last = false }: { number: string; icon: ReactNode; title: string; detail: string; state: "complete" | "pending" | "unknown"; last?: boolean }) {
+  const complete = state === "complete";
+  const unknown = state === "unknown";
+  return <div className={`setup-step ${last ? "last" : ""}`}><div className={`step-number ${complete ? "done" : ""}`}>{complete ? <Check size={14} /> : number}</div><div className="step-icon">{icon}</div><div className="step-copy"><strong>{title}</strong><span>{detail}</span></div><StatusPill ok={complete} neutral={unknown} label={complete ? "Complete" : unknown ? "Not reported" : "Pending"} /></div>;
 }
 
 function FileChoice({ label, detail, value, action }: { label: string; detail: string; value: string; action: () => void }) {

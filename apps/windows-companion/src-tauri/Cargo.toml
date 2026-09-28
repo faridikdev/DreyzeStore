@@ -1,6 +1,6 @@
 [package]
 name = "dreyzestore-companion"
-version = "0.9.0-1"
+version = "0.9.0-2"
 description = "Local Windows installation companion for DreyzeStore"
 authors = ["DreyzeStore contributors"]
 edition = "2024"
@@ -8,7 +8,7 @@ edition = "2024"
 [package.metadata.tauri-winres]
 FileDescription = "DreyzeStore Companion"
 ProductName = "DreyzeStore Companion"
-ProductVersion = "0.9.0-1"
+ProductVersion = "0.9.0-2"
 OriginalFilename = "DreyzeStore Companion.exe"
 LegalCopyright = "Copyright DreyzeStore contributors"
 
@@ -47,11 +47,15 @@ tokio = { version = "1", features = ["fs", "io-util", "macros", "net", "process"
 tokio-util = { version = "0.7", features = ["io", "rt"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+rootcause = "0.12"
 uuid = { version = "1", features = ["v4", "serde"] }
 zip = { version = "2", default-features = false, features = ["deflate", "deflate-flate2"] }
 zeroize = { version = "1", features = ["derive"] }
 keyring = { version = "3", features = ["windows-native"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory", "Win32_System_Services"] }
+isideload = { version = "=0.4.0", default-features = false, features = ["install", "keyring-storage", "tokio-mt"] }
+apple-codesign = { package = "isideload-apple-codesign", version = "=0.29.11" }
+idevice = { version = "=0.1.61", default-features = false, features = ["ring", "usbmuxd", "afc", "installation_proxy"] }
 
 [dev-dependencies]
 tempfile = "3"

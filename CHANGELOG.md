@@ -1,5 +1,14 @@
 # Changelog
 
+## PHASE 8.5 — Windows Apple Account provisioning prototype (2026-09-28)
+
+- Added an opt-in local Apple Account login/2FA, development-team selection, explicit USB device registration, and certificate preparation flow using pinned upstream `isideload`.
+- Added user-selected HTTPS Anisette V3 endpoint with a trust acknowledgement; the Companion explains the ADI/Anisette data sent to that operator.
+- Added local session/private-key storage through Windows Credential Manager and stable team-suffixed bundle IDs. Signing still passes through the existing package validation/install/inventory-confirmation boundary.
+- Added a fail-closed package compatibility gate and validation of the returned team, app ID, device, certificate/profile dates before installation.
+- Live Apple Account provisioning and physical iPhone installation remain **NOT TESTED / NOT VERIFIED**. This is an experimental reverse-engineered workflow, not an Apple-supported Windows API.
+- The transitive `apple-codesign-quick` dependency is LGPL-2.1-or-later; shipping a linked Windows binary requires a relinking/source compliance review.
+
 ## 0.9.0 RC1 — 2026-09-28
 
 This release candidate focuses on first-run guidance, predictable recovery, and physical-device readiness. It is unsigned and requires a configured HTTPS catalog API and the user's own Apple Development signing materials before a real install.
@@ -37,5 +46,5 @@ This release candidate focuses on first-run guidance, predictable recovery, and 
 - Physical iPhone signing/install/update/refresh/uninstall is **NOT VERIFIED** in CI.
 - CI does not hold Apple signing credentials. iOS output is unsigned and cannot be installed until signed locally with the tester's own identity/profile.
 - Release builds need an operator-supplied HTTPS API base URL. No production API URL, Cloudflare resource, DNS entry, or production secret is configured by this release.
-- Standard iOS installation requires the user's own device-matched development signing material on Windows Companion; Apple Account provisioning is not automated.
+- Windows Apple Account provisioning is experimental and unverified; imported user-owned signing files remain an alternative.
 - App Store privacy/safety certification and malware scanning are outside the package integrity checks.

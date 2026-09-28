@@ -189,6 +189,7 @@ impl PackageInstallCoordinator {
             _ = cancel.cancelled() => return Err(CompanionError::Operation("user cancelled installation".into())),
             result = self.signer.sign(&validated, udid) => result?,
         };
+        let _signed_output_cleanup = SignedOutputCleanup(signed.path.clone());
         if cancel.is_cancelled() {
             return Err(CompanionError::Operation(
                 "user cancelled installation".into(),
@@ -201,7 +202,7 @@ impl PackageInstallCoordinator {
         }
         self.jobs.set(request_id, InstallState::Confirming);
         let inventory = self.devices.installed_apps(udid).await?;
-        let installed = inventory.iter().find(|app| app.bundle_identifier == expected.bundle_identifier)
+        let installed = inventory.iter().find(|app| app.bundle_identifier == signed.info.bundle_identifier)
             .ok_or_else(|| CompanionError::Operation("device completed the install request but the app is absent from installed-app inventory".into()))?;
         if installed.version.as_deref() != Some(expected.version.as_str())
             || installed.build.as_deref() != Some(expected.build.as_str())
@@ -237,6 +238,48 @@ impl PackageInstallCoordinator {
             ));
         }
         Ok(())
+    }
+}
+
+/// Removes only signer-generated UUID outputs from the two managed output
+/// directories. A signer returning an unrelated path cannot make cleanup
+/// delete arbitrary user files.
+struct SignedOutputCleanup(PathBuf);
+
+impl Drop for SignedOutputCleanup {
+    fn drop(&mut self) {
+        let Some(parent) = self.0.parent() else {
+            return;
+        };
+        if !matches!(
+            parent.file_name().and_then(|name| name.to_str()),
+            Some("signed" | "signed-apple-account")
+        ) {
+            return;
+        }
+        let Some(name) = self.0.file_name().and_then(|name| name.to_str()) else {
+            return;
+        };
+        let Some(stem) = PathBuf::from(name)
+            .file_stem()
+            .and_then(|part| part.to_str())
+            .map(ToOwned::to_owned)
+        else {
+            return;
+        };
+        let extension = self.0.extension().and_then(|part| part.to_str());
+        if uuid::Uuid::parse_str(&stem).is_err() || !matches!(extension, Some("ipa" | "app")) {
+            return;
+        }
+        match std::fs::symlink_metadata(&self.0) {
+            Ok(metadata) if metadata.file_type().is_dir() => {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+            Ok(metadata) if metadata.file_type().is_file() => {
+                let _ = std::fs::remove_file(&self.0);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -361,6 +404,13 @@ mod tests {
     }
 
     fn fixture() -> (tempfile::TempDir, PathBuf, PackageExpectation) {
+        fixture_version("1.0.0", "1")
+    }
+
+    fn fixture_version(
+        version: &str,
+        build: &str,
+    ) -> (tempfile::TempDir, PathBuf, PackageExpectation) {
         use std::io::Write;
         use zip::{ZipWriter, write::SimpleFileOptions};
         let dir = tempdir().unwrap();
@@ -375,8 +425,8 @@ mod tests {
         for (key, value) in [
             ("CFBundleIdentifier", "org.dreyze.sample"),
             ("CFBundleExecutable", "Sample"),
-            ("CFBundleShortVersionString", "1.0.0"),
-            ("CFBundleVersion", "1"),
+            ("CFBundleShortVersionString", version),
+            ("CFBundleVersion", build),
             ("MinimumOSVersion", "16.0"),
         ] {
             plist.insert(key.into(), plist::Value::String(value.into()));
@@ -393,13 +443,300 @@ mod tests {
             request_id: "test-install".into(),
             app_name: "Sample".into(),
             bundle_identifier: "org.dreyze.sample".into(),
-            version: "1.0.0".into(),
-            build: "1".into(),
+            version: version.into(),
+            build: build.into(),
             minimum_os_version: Some("16.0".into()),
             sha256: hex::encode(sha2::Sha256::digest(&data)),
             size: data.len() as u64,
         };
         (dir, path, expected)
+    }
+
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum MockAppleState {
+        SignedOut,
+        TwoFactorPending,
+        Authenticated,
+        TeamSelected,
+        DeviceRegistered,
+        CertificateReady,
+        ProfileReady { original: String, signed: String },
+    }
+
+    /// Test-only Apple developer service. It never connects to Apple and uses
+    /// generated IPA fixtures; production commands are not wired to this type.
+    struct MockAppleDeveloperService {
+        state: Mutex<MockAppleState>,
+        team_id: String,
+        udid: String,
+        output_root: PathBuf,
+    }
+
+    impl MockAppleDeveloperService {
+        fn new(output_root: PathBuf) -> Self {
+            Self {
+                state: Mutex::new(MockAppleState::SignedOut),
+                team_id: "ABCDE12345".into(),
+                udid: "0123456789abcdef0123456789ABCDEF".into(),
+                output_root,
+            }
+        }
+
+        fn authenticate(&self, account: &str, password: &str) -> Result<()> {
+            if !account.contains('@') || password.is_empty() {
+                return Err(CompanionError::Operation(
+                    "mock Apple authentication failed".into(),
+                ));
+            }
+            *self.state.lock().unwrap() = MockAppleState::TwoFactorPending;
+            Ok(())
+        }
+
+        fn submit_two_factor(&self, code: &str) -> Result<()> {
+            if *self.state.lock().unwrap() != MockAppleState::TwoFactorPending || code != "123456" {
+                return Err(CompanionError::Operation(
+                    "mock Apple verification code rejected".into(),
+                ));
+            }
+            *self.state.lock().unwrap() = MockAppleState::Authenticated;
+            Ok(())
+        }
+
+        fn list_teams(&self) -> Result<Vec<String>> {
+            if *self.state.lock().unwrap() != MockAppleState::Authenticated {
+                return Err(CompanionError::SigningRequired);
+            }
+            Ok(vec![self.team_id.clone()])
+        }
+
+        fn select_team(&self, team: &str) -> Result<()> {
+            if team != self.team_id || *self.state.lock().unwrap() != MockAppleState::Authenticated
+            {
+                return Err(CompanionError::SigningRequired);
+            }
+            *self.state.lock().unwrap() = MockAppleState::TeamSelected;
+            Ok(())
+        }
+
+        fn register_device(&self, udid: &str, user_confirmed: bool) -> Result<()> {
+            if udid != self.udid
+                || !user_confirmed
+                || *self.state.lock().unwrap() != MockAppleState::TeamSelected
+            {
+                return Err(CompanionError::DeviceUnavailable);
+            }
+            *self.state.lock().unwrap() = MockAppleState::DeviceRegistered;
+            Ok(())
+        }
+
+        fn prepare_certificate(&self) -> Result<()> {
+            if *self.state.lock().unwrap() != MockAppleState::DeviceRegistered {
+                return Err(CompanionError::SigningRequired);
+            }
+            *self.state.lock().unwrap() = MockAppleState::CertificateReady;
+            Ok(())
+        }
+
+        fn create_app_id_and_profile(&self, original: &str) -> Result<String> {
+            if *self.state.lock().unwrap() != MockAppleState::CertificateReady {
+                return Err(CompanionError::SigningRequired);
+            }
+            let signed = format!("{original}.{}", self.team_id);
+            *self.state.lock().unwrap() = MockAppleState::ProfileReady {
+                original: original.into(),
+                signed: signed.clone(),
+            };
+            Ok(signed)
+        }
+    }
+
+    #[async_trait]
+    impl SigningProvider for MockAppleDeveloperService {
+        fn validate_provisioning(&self, package: &ValidatedPackage, udid: &str) -> Result<()> {
+            match &*self.state.lock().unwrap() {
+                MockAppleState::ProfileReady { original, .. }
+                    if original == &package.metadata.bundle_identifier && udid == self.udid =>
+                {
+                    Ok(())
+                }
+                _ => Err(CompanionError::SigningRequired),
+            }
+        }
+
+        fn validate_device(&self, udid: &str) -> Result<()> {
+            if udid == self.udid
+                && matches!(
+                    *self.state.lock().unwrap(),
+                    MockAppleState::ProfileReady { .. }
+                )
+            {
+                Ok(())
+            } else {
+                Err(CompanionError::DeviceUnavailable)
+            }
+        }
+
+        async fn sign(&self, package: &ValidatedPackage, _udid: &str) -> Result<SignedPackage> {
+            let signed_bundle = match &*self.state.lock().unwrap() {
+                MockAppleState::ProfileReady { original, signed }
+                    if original == &package.metadata.bundle_identifier =>
+                {
+                    signed.clone()
+                }
+                _ => return Err(CompanionError::SigningRequired),
+            };
+            let output = self.output_root.join("signed");
+            std::fs::create_dir_all(&output)?;
+            let signed_path = output.join(format!("{}.ipa", uuid::Uuid::new_v4()));
+            std::fs::copy(&package.path, &signed_path)?;
+            Ok(SignedPackage {
+                path: signed_path,
+                info: SignedPackageInfo {
+                    bundle_identifier: signed_bundle,
+                    version: package.metadata.version.clone(),
+                    build: package.metadata.build.clone(),
+                    original_sha256: package.metadata.sha256.clone(),
+                    signed_sha256: package.metadata.sha256.clone(),
+                    signing_identity: "test-only mock Apple team".into(),
+                    team_identifier: Some(self.team_id.clone()),
+                    certificate_expires_at: Some(Utc::now() + chrono::Duration::days(30)),
+                    provisioning_expiration: Some(Utc::now() + chrono::Duration::days(7)),
+                    created_at: Utc::now(),
+                },
+            })
+        }
+
+        fn status(&self) -> SigningStatus {
+            SigningStatus::not_configured()
+        }
+    }
+
+    #[test]
+    fn signed_output_cleanup_removes_only_uuid_outputs_from_managed_signer_dirs() {
+        let temp = tempdir().unwrap();
+        let managed = temp.path().join("signed-apple-account");
+        std::fs::create_dir_all(&managed).unwrap();
+        let signed_app = managed.join(format!("{}.app", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&signed_app).unwrap();
+        std::fs::write(signed_app.join("marker"), b"signed").unwrap();
+        let unrelated = temp.path().join("user-file.ipa");
+        std::fs::write(&unrelated, b"keep").unwrap();
+
+        drop(SignedOutputCleanup(signed_app.clone()));
+
+        assert!(!signed_app.exists());
+        assert!(unrelated.exists());
+    }
+
+    #[tokio::test]
+    async fn mock_apple_provisioning_install_refresh_update_and_uninstall_e2e() {
+        const UDID: &str = "0123456789abcdef0123456789ABCDEF";
+        let (dir, first_path, mut first) = fixture_version("1.0.0", "1");
+        let (_update_dir, update_path, mut update) = fixture_version("2.0.0", "2");
+        first.request_id = "mock-install".into();
+        update.request_id = "mock-update".into();
+        let signed_bundle = "org.dreyze.sample.ABCDE12345".to_owned();
+        let mock_apple = Arc::new(MockAppleDeveloperService::new(dir.path().to_owned()));
+
+        mock_apple
+            .authenticate("developer@example.test", "test-only-password")
+            .unwrap();
+        assert_eq!(
+            *mock_apple.state.lock().unwrap(),
+            MockAppleState::TwoFactorPending
+        );
+        assert!(mock_apple.submit_two_factor("000000").is_err());
+        mock_apple.submit_two_factor("123456").unwrap();
+        assert_eq!(mock_apple.list_teams().unwrap(), vec!["ABCDE12345"]);
+        mock_apple.select_team("ABCDE12345").unwrap();
+        mock_apple.register_device(UDID, true).unwrap();
+        mock_apple.prepare_certificate().unwrap();
+        assert_eq!(
+            mock_apple
+                .create_app_id_and_profile(&first.bundle_identifier)
+                .unwrap(),
+            signed_bundle
+        );
+
+        let device = Arc::new(TestDevice {
+            available: true,
+            install_succeeds: true,
+            inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(Some(vec![InstalledApp {
+                bundle_identifier: signed_bundle.clone(),
+                version: Some(first.version.clone()),
+                build: Some(first.build.clone()),
+            }])),
+        });
+        let jobs = InstallJobStore::default();
+        let coordinator =
+            PackageInstallCoordinator::new(device.clone(), mock_apple.clone(), jobs.clone());
+        let install_token = jobs.insert(first.request_id.clone()).unwrap();
+        coordinator
+            .execute(
+                first_path.clone(),
+                first.clone(),
+                UDID.into(),
+                install_token,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            jobs.get("mock-install"),
+            Some(InstallState::Installed { .. })
+        ));
+        assert_eq!(
+            coordinator.inventory(UDID).await.unwrap()[0].bundle_identifier,
+            signed_bundle
+        );
+
+        // Simulate refreshing the per-app profile: preserve app identity, then
+        // reinstall and confirm the same version from device inventory.
+        mock_apple
+            .state
+            .lock()
+            .unwrap()
+            .clone_from(&MockAppleState::CertificateReady);
+        mock_apple
+            .create_app_id_and_profile(&first.bundle_identifier)
+            .unwrap();
+        *device.inventory_after_install.lock().unwrap() = Some(vec![InstalledApp {
+            bundle_identifier: signed_bundle.clone(),
+            version: Some(first.version.clone()),
+            build: Some(first.build.clone()),
+        }]);
+        first.request_id = "mock-refresh".into();
+        let refresh_token = jobs.insert(first.request_id.clone()).unwrap();
+        coordinator
+            .execute(first_path, first.clone(), UDID.into(), refresh_token)
+            .await
+            .unwrap();
+        assert!(matches!(
+            jobs.get("mock-refresh"),
+            Some(InstallState::Installed { .. })
+        ));
+
+        *device.inventory_after_install.lock().unwrap() = Some(vec![InstalledApp {
+            bundle_identifier: signed_bundle.clone(),
+            version: Some(update.version.clone()),
+            build: Some(update.build.clone()),
+        }]);
+        update.request_id = "mock-update".into();
+        let update_token = jobs.insert(update.request_id.clone()).unwrap();
+        coordinator
+            .execute(update_path, update.clone(), UDID.into(), update_token)
+            .await
+            .unwrap();
+        let confirmed = coordinator.inventory(UDID).await.unwrap();
+        assert_eq!(confirmed[0].version.as_deref(), Some("2.0.0"));
+        assert_eq!(confirmed[0].build.as_deref(), Some("2"));
+        assert!(matches!(
+            jobs.get("mock-update"),
+            Some(InstallState::Installed { .. })
+        ));
+
+        coordinator.uninstall(UDID, &signed_bundle).await.unwrap();
+        assert!(coordinator.inventory(UDID).await.unwrap().is_empty());
     }
 
     #[tokio::test]

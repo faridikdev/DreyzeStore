@@ -340,18 +340,18 @@ fn validate_profile_device(profile: &ProvisioningProfile, target_udid: &str) -> 
     Ok(())
 }
 
-#[derive(Debug)]
-struct ProvisioningProfile {
-    name: String,
-    team_id: String,
-    app_identifier: String,
-    provisioned_devices: Vec<String>,
-    developer_certificates: Vec<Vec<u8>>,
-    expiration: DateTime<Utc>,
+#[derive(Clone, Debug)]
+pub(crate) struct ProvisioningProfile {
+    pub(crate) name: String,
+    pub(crate) team_id: String,
+    pub(crate) app_identifier: String,
+    pub(crate) provisioned_devices: Vec<String>,
+    pub(crate) developer_certificates: Vec<Vec<u8>>,
+    pub(crate) expiration: DateTime<Utc>,
 }
 
 impl ProvisioningProfile {
-    fn authorizes_bundle(&self, bundle_id: &str) -> bool {
+    pub(crate) fn authorizes_bundle(&self, bundle_id: &str) -> bool {
         let suffix = self
             .app_identifier
             .split_once('.')
@@ -373,7 +373,7 @@ impl ProvisioningProfile {
     }
 }
 
-fn parse_mobileprovision(bytes: &[u8]) -> Result<ProvisioningProfile> {
+pub(crate) fn parse_mobileprovision(bytes: &[u8]) -> Result<ProvisioningProfile> {
     let marker = b"<?xml";
     let start = bytes
         .windows(marker.len())

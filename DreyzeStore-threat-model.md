@@ -1,50 +1,63 @@
-# DreyzeStore Windows Companion Threat Model
+# DreyzeStore Apple provisioning threat model
 
-Scope: PHASE 6.5's iPhone-to-Windows Companion install path. This is a focused trust-boundary review, not a claim that the complete app package or operating system is safe.
+## Scope and assumptions
 
-## System and assets
+This model covers the experimental Windows Companion Apple Account provisioning path introduced in PHASE 8.5. The confirmed threat model is **one local Windows user**. Windows Credential Manager and DPAPI isolate stored material from other ordinary Windows users, but do not defend against malware or an administrator acting as the same logged-in user. Live Apple-service and physical-device behavior remain unverified.
+
+## Data flow and trust boundaries
 
 ```mermaid
 flowchart LR
-  Repository[Published repository/API] -->|HTTPS, digest metadata| IOS[iOS DreyzeStore]
-IOS -->|Pinned LAN TLS, paired token + client UUID, VerifiedPackage bytes| Win[Windows Companion]
-  Win -->|Recheck checksum, size, IPA metadata| Verify[PackageValidator]
-  Verify --> Sign[Local signing provider and DPAPI vault]
-  Sign -->|Signed IPA via explicit UDID| Device[iPhone installation service]
-  Device -->|Installed-app inventory| Win
-  Win -->|Confirmed result| IOS
+  U[Local Windows user]
+  UI[Tauri / React UI]
+  C[Rust Companion process]
+  K[Windows Credential Manager]
+  A[Apple authentication and developer services]
+  N[User-selected HTTPS Anisette V3 provider]
+  P[Managed local package storage]
+  I[USB device service / iPhone]
+  B[DreyzeStore catalog backend]
+
+  U -->|email, password, one-use 2FA| UI
+  UI -->|Tauri IPC; password and 2FA only for active call| C
+  C -->|auth, teams, certificate, device, app ID/profile calls| A
+  C <-->|session, ADI state, local key material| K
+  C <-->|Anisette V3 identifier and ADI protocol state| N
+  C -->|validated IPA / signed app| P
+  C -->|USB install and inventory| I
+  UI -. no Apple credentials, session, or signing key .-> B
 ```
 
-Protected assets: authorized IPA bytes and published SHA-256; pairing token; device UDID and trust state; P12 private key and password; provisioning profile; local TLS private key; install and refresh records. Security boundaries: public store/API vs iPhone; iPhone vs Windows LAN service; Windows user account vs local files/processes; USB trusted pairing vs device installation services.
+## Assets
 
-## Attacker assumptions
+- Apple Account password and one-time verification code in transient UI/process memory.
+- Apple session token and ADSID in the current user's Windows Credential Manager.
+- Anisette/ADI state and the selected provider URL in local credential storage.
+- Locally generated signing private key and Apple Development certificate metadata.
+- Original verified package, extracted app, and signed app in managed local storage.
+- Device UDID/team registration state and installation inventory.
 
-The model considers a malicious or compromised LAN client, replayed/stale API requests, a modified or malformed IPA, a fake/changed LAN endpoint, malicious repository metadata, and accidental local credential exposure. It does not assume an attacker already has Windows administrator privileges, can compromise iOS/Windows itself, or control both devices at the same time.
+## Threats and mitigations
 
-## Threat register
+| Threat | Mitigations in this phase | Residual risk |
+|---|---|---|
+| Apple credentials leaked to DreyzeStore backend | Apple auth runs in local Companion; no backend call is present in the auth flow; UI explicitly states boundary | Verify with network capture during real-device test |
+| Anisette provider harvests credentials | UI states exactly that the operator is a third party and receives Anisette/ADI data; explicit trust checkbox; endpoint must use HTTPS | Provider sees its protocol payload and can correlate requests; no local provider yet |
+| MITM / insecure endpoint | HTTPS required; URL credentials/query/fragment rejected; upstream uses TLS/WSS | A trusted CA compromise or malicious endpoint remains possible |
+| Password/code appears in logs | upstream debug output disabled; Companion does not initialize verbose upstream logging; generic Tauri errors; no credential fields in audit/diagnostics | Runtime/crash tooling and OS-level memory access are outside the app's complete control |
+| Session theft | Windows Credential Manager; expiry checked before restore; sign-out deletes session/ADSID/account metadata | Malware running as the user can access process/account context; session invalidation remains Apple's responsibility |
+| Wrong team/device profile used | explicit team selection; user confirmation before device registration; registration state cleared after account/team changes; signed profile claims checked against team, bundle ID, UDID and expiry | Apple profile signature and runtime entitlement checks remain authoritative |
+| Malicious/tampered IPA | existing VerifiedPackage path and second local IPA validation are retained; narrow package envelope; signature/profile inspection before install; exact device inventory confirmation | Integrity and metadata checks do not prove that an app is benign |
+| Bundle identifier confusion | deterministic `<original>.<team ID>` ID; signed output metadata must match; profile authorization rechecked | Cross-team migration and extension bundles are not supported |
+| Certificate quota bypass / revocation | upstream max-certificate behavior is explicitly `Error`; no automatic certificate deletion/revocation | User may need to manage account limits through Apple-supported tools |
+| Replay or duplicate local install action | existing paired local API authentication, timestamp/nonce, and idempotent install job checks remain the installation boundary | Apple auth protocol itself is undocumented and separately controlled by upstream library |
+| License obligations missed | dependencies pinned and license metadata recorded; no SideStore/iLoader source is copied | A distributable binary linking the LGPL dependency needs packaging/relinking compliance review before release |
 
-| ID | Threat | Risk | Mitigation in this phase | Remaining exposure |
-| --- | --- | --- | --- | --- |
-| T1 | LAN client submits an install/uninstall request | High | One-use 120-second pairing code; token hash and paired client UUID in Windows Credential Manager; TLS certificate fingerprint pin; timestamp and unique nonce; pair rate limit | Token theft from a compromised paired phone permits local calls until forgotten/replaced |
-| T2 | MITM swaps IPA or Companion endpoint | High | iPhone checks a private HTTPS URL, pins exact certificate DER SHA-256, refuses redirects; Windows independently hashes bytes against package expectation | User must obtain the displayed QR from the intended PC; checksum is integrity, not publisher trust |
-| T3 | Replay install request or duplicate job | Medium | Request UUID, create-new staging file, request state dedupe, timestamp window and nonce replay cache | In-memory jobs reset on Companion restart; no remote install result is fabricated after reset |
-| T4 | Malformed/hostile archive escapes or exhausts storage | High | Upload size cap; actual byte count; strict ZIP entry/expanded-size/compression-ratio caps; path traversal, absolute path, symlink, Payload, plist and executable checks; extraction to generated directory; orphan cleanup | Native signer/parser bugs remain possible; the app can reject unusual legitimate packages |
-| T5 | IPA metadata differs from store metadata | High | Windows compares expected digest, bundle ID, version, build, size, minimum OS; signed output metadata is compared again | A malicious publisher can publish malware with internally matching metadata/hash |
-| T6 | Arbitrary path/URL or command injection | High | Local API accepts streamed bytes and typed metadata, no filesystem path or URL; UUID/digest generated storage names; process arguments are passed as an array; validated UDID and bundle ID; no shell | Same-user malware can manipulate app-data/processes |
-| T7 | Signing credential leaks to cloud, logs, or process list | High | No Apple login UI/API; DPAPI-encrypted P12/profile; Credential Manager password; zsign password stdin patch and zeroization; no password argv/env | zsign requires a transient P12 file in app data; a crash may leave it until next startup cleanup; deletion is not secure erase |
-| T8 | Companion reports install on handoff or tool exit only | High | Confirm installation via connected device inventory and exact bundle/version/build readback; uninstall also checks disappearance | Inventory response behavior must be verified on real supported devices |
-| T9 | Refresh reuses a path from corrupted local metadata | Medium | Refuse unless stored name is exactly SHA-256 plus `.ipa`; same paired UDID; verify original package before re-sign/install | Local metadata corruption can make refresh unavailable; it cannot select an arbitrary path |
-| T10 | Old profile expires / app stops launching | Medium | Parse profile expiration, block expired profile, show expiration; no permanent-signing promise | User must import refreshed Apple-supported identity/profile and reinstall |
+## Security checks and evidence
 
-## Security invariants
-
-1. `InstallationBackend` accepts only the iOS `VerifiedPackage` type.
-2. Windows recomputes digest and metadata before signing; it does not trust the iPhone's prior verification claim.
-3. A server metadata object or URL cannot be converted into a local install path.
-4. `Installed` means device inventory readback exactly matches the package identity.
-5. Share Sheet/handoff, if available on older iOS versions, remains `Handed Off` and cannot be reported as Installed.
-6. Apple credentials/private key material do not enter Cloudflare, repository metadata, CI secrets, or Git.
-
-## Operational assumptions and residual risk
-
-Windows device support depends on the upstream `pymobiledevice3` CLI and classic iTunes' Apple Mobile Device Service; this project does not redistribute the GPL tool. Developer Mode is not reported by the current usbmux short-info output and must be verified manually when unknown. An unsigned installer is not a trusted Windows publisher. zsign and its bundled cryptographic dependencies are pinned and notices are bundled, but a physical iPhone test is still required before claiming the full real-device path is verified.
+- Password/2FA do not appear in command-line arguments or persistent app storage.
+- Password crosses Tauri IPC only for the local sign-in call; the UI clears its controlled field immediately after starting the call.
+- The anisette endpoint must be explicit and HTTPS; the default value alone does not imply trust.
+- Auth/session/ADI storage uses Windows Credential Manager through the native keyring backend.
+- IPA signing is not a path around normal package validation, local device pairing, signing checks, and inventory confirmation.
+- Mock/unit tests can validate state and package policy only. They cannot establish Apple's acceptance or a physical installation.
