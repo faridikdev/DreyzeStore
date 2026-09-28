@@ -380,9 +380,9 @@ final class UpdatesViewModel: ObservableObject {
         var failed = 0
         var signingRequired = 0
         defer { activeBundleIdentifier = nil; isBatchRunning = false }
-        for update in candidates {
+        for candidate in candidates {
             let previousHistoryID = history.records.first?.id
-            await update(update)
+            await update(candidate)
             if let result = history.records.first, result.id != previousHistoryID {
                 switch result.result {
                 case .updated: succeeded += 1
