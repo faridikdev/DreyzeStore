@@ -1,0 +1,42 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		A00000000000000000000001 /* DreyzeDeviceTest.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00000000000000000000010 /* DreyzeDeviceTest.swift */; };
+		A00000000000000000000010 /* DreyzeDeviceTest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DreyzeDeviceTest.swift; sourceTree = "<group>"; };
+		A00000000000000000000020 /* DreyzeDeviceTest.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeDeviceTest.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A00000000000000000000030 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A00000000000000000000001,); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000031 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000032 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A00000000000000000000040 /* DreyzeDeviceTest */ = {
+			isa = PBXGroup;
+			children = (A00000000000000000000010, A00000000000000000000041,);
+			sourceTree = "<group>";
+		};
+		A00000000000000000000041 /* Products */ = {isa = PBXGroup; children = (A00000000000000000000020,); name = Products; sourceTree = "<group>"; };
+		A00000000000000000000042 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {BuildIndependentTargetsInParallel = YES; LastUpgradeCheck = 1600; TargetAttributes = {A00000000000000000000050 = {CreatedOnToolsVersion = 16.0; }; }; };
+			buildConfigurationList = A00000000000000000000070;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base,);
+			mainGroup = A00000000000000000000040;
+			productRefGroup = A00000000000000000000041;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A00000000000000000000050,);
+		};
+		A00000000000000000000050 /* DreyzeDeviceTest */ = {isa = PBXNativeTarget; buildConfigurationList = A00000000000000000000071; buildPhases = (A00000000000000000000030, A00000000000000000000031, A00000000000000000000032,); buildRules = (); dependencies = (); name = DreyzeDeviceTest; productName = DreyzeDeviceTest; productReference = A00000000000000000000020; productType = "com.apple.product-type.application"; };
+		A00000000000000000000070 /* Project configuration list */ = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000080, A00000000000000000000081,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00000000000000000000071 /* Target configuration list */ = {isa = XCConfigurationList; buildConfigurations = (A00000000000000000000082, A00000000000000000000083,); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A00000000000000000000080 /* Project Debug */ = {isa = XCBuildConfiguration; buildSettings = {IPHONEOS_DEPLOYMENT_TARGET = 16.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Debug; };
+		A00000000000000000000081 /* Project Release */ = {isa = XCBuildConfiguration; buildSettings = {IPHONEOS_DEPLOYMENT_TARGET = 16.0; SDKROOT = iphoneos; SWIFT_VERSION = 5.0; }; name = Release; };
+		A00000000000000000000082 /* Target Debug */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Dreyze Test"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = org.dreyzestore.test.sample; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Debug; };
+		A00000000000000000000083 /* Target Release */ = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGNING_ALLOWED = NO; CURRENT_PROJECT_VERSION = 1; GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Dreyze Test"; IPHONEOS_DEPLOYMENT_TARGET = 16.0; MARKETING_VERSION = 0.9.0; PRODUCT_BUNDLE_IDENTIFIER = org.dreyzestore.test.sample; PRODUCT_NAME = "$(TARGET_NAME)"; SWIFT_VERSION = 5.0; TARGETED_DEVICE_FAMILY = 1; }; name = Release; };
+	};
+	rootObject = A00000000000000000000042 /* Project object */;
+}

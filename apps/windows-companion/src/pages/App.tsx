@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
@@ -89,6 +90,15 @@ type Section = "overview" | "setup" | "signing";
 
 const formatDate = (value?: string | null) => value ? new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value)) : "Not reported";
 const masked = (value: string) => `${value.slice(0, 8)} ···· ${value.slice(-6)}`;
+function userFacingError(error: unknown) {
+  const detail = String(error).toLowerCase();
+  if (detail.includes("signing") || detail.includes("provision") || detail.includes("certificate")) return "Signing setup is not ready. Check the Apple Signing page and run diagnostics.";
+  if (detail.includes("device") || detail.includes("usb") || detail.includes("trust") || detail.includes("developer mode")) return "The iPhone is unavailable. Connect it over USB, unlock it, and check Trust and Developer Mode.";
+  if (detail.includes("pair") || detail.includes("certificate pin") || detail.includes("unauthorized")) return "The paired connection could not be verified. Reconnect using the current one-time pairing code.";
+  if (detail.includes("inventory") || detail.includes("installed app") || detail.includes("install")) return "Installation could not be confirmed. Reconnect the iPhone, run diagnostics, and refresh its inventory.";
+  if (detail.includes("service") || detail.includes("pymobiledevice")) return "The Apple device service is unavailable. Check the setup requirements and run diagnostics.";
+  return "The operation could not be completed. Run diagnostics and try again.";
+}
 
 export default function App() {
   const [section, setSection] = useState<Section>("overview");
@@ -101,6 +111,7 @@ export default function App() {
   const [offer, setOffer] = useState<PairingOffer | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState("0.9.0 RC1");
   const refreshInFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -116,13 +127,16 @@ export default function App() {
       setHistory(nextHistory);
       setTestInstallation(nextTestInstallation);
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     } finally {
       refreshInFlight.current = false;
     }
   }, []);
 
   useEffect(() => {
+    void getVersion()
+      .then((version) => setAppVersion(version === "0.9.0-1" ? "0.9.0 RC1" : version))
+      .catch(() => undefined);
     void refresh();
     const timer = window.setInterval(() => void refresh(), 30000);
     return () => window.clearInterval(timer);
@@ -137,7 +151,7 @@ export default function App() {
       setOffer(await invoke<PairingOffer>("create_pairing_qr"));
       await refresh();
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     } finally {
       setBusy(false);
     }
@@ -151,7 +165,7 @@ export default function App() {
       await refresh();
       setNotice("The paired phone token was removed from Windows Credential Manager.");
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     } finally {
       setBusy(false);
     }
@@ -163,7 +177,7 @@ export default function App() {
     try {
       setReadiness(await invoke<DeviceReadiness>("get_device_readiness"));
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     } finally {
       setDiagnosing(false);
     }
@@ -186,7 +200,7 @@ export default function App() {
       await refresh();
       setNotice(`Test app ${installed.bundleIdentifier} ${installed.version} was confirmed in the iPhone inventory.`);
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     } finally {
       setTestingInstall(false);
     }
@@ -200,7 +214,7 @@ export default function App() {
       await refresh();
       setNotice("The test app was removed and absence was confirmed in device inventory.");
     } catch (error) {
-      setNotice(String(error));
+      setNotice(userFacingError(error));
     }
   }
 
@@ -223,7 +237,7 @@ export default function App() {
           <div><strong>Need a hand?</strong><span>Open the setup guide</span></div>
           <ChevronRight size={15} />
         </div>
-        <div className="rail-footer"><span className="live-dot" /> Local service running <span className="version-tag">0.1.0</span></div>
+        <div className="rail-footer"><span className="live-dot" /> Local service running <span className="version-tag">{appVersion}</span></div>
       </aside>
 
       <main className="main-area">
@@ -387,13 +401,13 @@ function Signing({ snapshot, readiness, diagnosing, testingInstall, testInstalla
       setP12Path(""); setProfilePath("");
       onNotice("Signing files were encrypted with DPAPI and the P12 password was saved in Windows Credential Manager.");
       await onChanged();
-    } catch (error) { onNotice(String(error)); }
+    } catch (error) { onNotice(userFacingError(error)); }
     finally { setPassword(""); setBusy(false); }
   }
   async function remove() {
     if (!window.confirm("Remove the local signing identity from this PC?")) return;
     try { await invoke("clear_signing_identity"); await onChanged(); onNotice("Local signing identity removed."); }
-    catch (error) { onNotice(String(error)); }
+    catch (error) { onNotice(userFacingError(error)); }
   }
 
   return <div className="page-content narrow-content">

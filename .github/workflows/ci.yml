@@ -26,6 +26,7 @@ jobs:
           target: x86_64-pc-windows-msvc
           components: rustfmt
       - run: npm ci
+      - run: npm audit --audit-level=high
       - name: Build pinned zsign sidecar
         shell: pwsh
         run: ./scripts/build-zsign-windows.ps1
@@ -35,12 +36,24 @@ jobs:
       - run: npm run build --workspace @dreyzestore/windows-companion
       - name: Build unsigned Windows installers
         run: npm run tauri --workspace @dreyzestore/windows-companion -- build --bundles nsis,msi
+      - name: Write installer SHA-256 manifest
+        shell: pwsh
+        run: |
+          $bundle = Resolve-Path 'apps/windows-companion/src-tauri/target/release/bundle'
+          $manifest = Join-Path $bundle 'SHA256SUMS.txt'
+          Remove-Item -LiteralPath $manifest -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object { $_.Extension -in '.exe', '.msi' } | ForEach-Object {
+            $relative = [System.IO.Path]::GetRelativePath($bundle, $_.FullName).Replace('\', '/')
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            Add-Content -LiteralPath $manifest -Value "$hash *$relative" -Encoding ascii
+          }
+          if (-not (Test-Path -LiteralPath $manifest) -or (Get-Item -LiteralPath $manifest).Length -eq 0) { throw 'No NSIS EXE/MSI installers were found to hash.' }
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
         with:
           name: DreyzeStoreCompanion-windows-x64
           path: apps/windows-companion/src-tauri/target/release/bundle/**
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
   backend:
     name: Backend and shared contracts
@@ -77,7 +90,7 @@ jobs:
       - run: npm run build --workspace @dreyzestore/admin
 
   ios:
-    name: iOS simulator build and tests
+    name: iOS tests and unsigned RC artifacts
     if: github.event.repository.visibility == 'public'
     runs-on: macos-latest
     steps:
@@ -104,3 +117,45 @@ jobs:
           ARCHS=${{ steps.simulator.outputs.arch }}
           ONLY_ACTIVE_ARCH=YES
           CODE_SIGNING_ALLOWED=NO
+      - name: Build unsigned iPhone app bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/dreyzestore-ios-rc"
+          derived_dir="$RUNNER_TEMP/dreyzestore-ios-derived"
+          mkdir -p "$artifact_dir"
+          xcodebuild build \
+            -project ios/DreyzeStore/DreyzeStore.xcodeproj \
+            -scheme DreyzeStore \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$derived_dir" \
+            CODE_SIGNING_ALLOWED=NO
+          app_path="$derived_dir/Build/Products/Release-iphoneos/DreyzeStore.app"
+          test -d "$app_path"
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" "$artifact_dir/DreyzeStore-iOS-unsigned-app.zip"
+          device_test_derived="$RUNNER_TEMP/dreyzestore-device-test-derived"
+          xcodebuild build \
+            -project ios/DreyzeStore/DreyzeStore.xcodeproj \
+            -scheme DreyzeStore \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$device_test_derived" \
+            PRODUCT_BUNDLE_IDENTIFIER=org.dreyzestore.test.store \
+            INFOPLIST_KEY_CFBundleDisplayName='DreyzeStore RC' \
+            CODE_SIGNING_ALLOWED=NO
+          device_test_app="$device_test_derived/Build/Products/Release-iphoneos/DreyzeStore.app"
+          bash scripts/package-dreyzestore-device-test-ipa.sh "$device_test_app" "$artifact_dir/DreyzeStore-RC-device-test.ipa"
+          bash scripts/package-device-test-ipa.sh "$artifact_dir/device-test" "$RUNNER_TEMP/dreyze-device-test-derived"
+          mv "$artifact_dir/device-test/DreyzeDeviceTest-sample.ipa" "$artifact_dir/DreyzeDeviceTest-sample.ipa"
+          rmdir "$artifact_dir/device-test"
+          cd "$artifact_dir"
+          shasum -a 256 DreyzeStore-iOS-unsigned-app.zip DreyzeDeviceTest-sample.ipa DreyzeStore-RC-device-test.ipa > SHA256SUMS.txt
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: DreyzeStore-iOS-0.9.0-rc.1
+          path: ${{ runner.temp }}/dreyzestore-ios-rc/**
+          if-no-files-found: error
+          retention-days: 30

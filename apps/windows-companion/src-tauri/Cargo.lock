@@ -983,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "dreyzestore-companion"
-version = "0.1.0"
+version = "0.9.0-1"
 dependencies = [
  "async-trait",
  "axum",
