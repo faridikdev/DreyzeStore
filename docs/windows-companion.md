@@ -37,7 +37,7 @@ The local API uses `/api/v1/device`, `/signing`, `/install`, `/install/{id}`, `/
 
 ## Device and package behavior
 
-`pymobiledevice3 usbmux list --usb` performs the host lockdown handshake without automatically pairing a new device. Only devices for which the service returns a short device record are treated as trusted. App inventory comes from `pymobiledevice3 apps list --type User`; install and uninstall use the upstream `apps install` and `apps uninstall` commands with an explicit UDID. DreyzeStore confirms installs and removals by reading inventory again.
+`pymobiledevice3 usbmux list --usb` performs the host lockdown handshake without automatically pairing a new device. Only devices for which the service returns a short device record are treated as trusted. App inventory comes from `pymobiledevice3 apps list --type User`; install and uninstall use the upstream `apps install` and `apps uninstall` commands with an explicit UDID. DreyzeStore confirms installs and removals by reading inventory again. Inventory includes the actual signed bundle ID and device-reported version/build. A record is `companionConfirmed` only when it exactly matches DreyzeStore's local installation record for that selected UDID; unknown apps are not promoted to Installed.
 
 The service does not currently expose Developer Mode through its device short-info response. Companion labels this status unknown and requires the owner to enable it manually. If Developer Mode is off, device install fails; DreyzeStore never changes this setting automatically.
 
@@ -53,7 +53,7 @@ The supported setup is to import the user's own Apple Development `.p12` and mat
 
 Apple Account login, 2FA, free Personal Team registration/profile creation, paid-team API-key onboarding, arbitrary entitlement remapping, and automatic/background refresh are not implemented. The paid App Store Connect API has documented provisioning endpoints, but a future local API-key flow must be designed separately. See [Apple signing research](apple-signing.md).
 
-After a confirmed install, Companion retains the original, digest-named IPA for local refresh and removes failed temporary uploads. On next start it clears interrupted staging/signing data and unreferenced originals. Refresh reinstalls the saved, same-version package. New-version update selection belongs to PHASE 7.
+After a confirmed install, Companion retains the original, digest-named IPA for local refresh and removes failed temporary uploads. On next start it clears interrupted staging/signing data and unreferenced originals. Refresh reinstalls the saved, same-version package and confirms the refreshed profile through a new live inventory read. The iOS update flow obtains only published releases from the public API, downloads and verifies them with the Phase 4 pipeline, then sends the resulting `VerifiedPackage` through this same local validation/sign/install path. See [updates](updates.md) and [refresh](refresh.md).
 
 ## Licensing
 

@@ -6,7 +6,7 @@ interface ParsedSemanticVersion {
 }
 
 const SEMVER_PATTERN =
-  /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))?(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+  /^(0|[1-9][0-9]*)(?:\.(0|[1-9][0-9]*))?(?:\.(0|[1-9][0-9]*))?(?:-((?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
 function parseSemanticVersion(value: string): ParsedSemanticVersion {
   const match = SEMVER_PATTERN.exec(value);
@@ -14,7 +14,7 @@ function parseSemanticVersion(value: string): ParsedSemanticVersion {
 
   return {
     major: BigInt(match[1]!),
-    minor: BigInt(match[2]!),
+    minor: BigInt(match[2] ?? "0"),
     patch: BigInt(match[3] ?? "0"),
     prerelease: match[4]?.split(".") ?? null,
   };
@@ -65,4 +65,55 @@ export function compareSemanticVersions(left: string, right: string): number {
 
 export function isSemanticVersion(value: string): boolean {
   return SEMVER_PATTERN.test(value);
+}
+
+interface BuildPart {
+  kind: "numeric" | "text";
+  value: string;
+}
+
+function buildParts(value: string): BuildPart[] {
+  return (value.match(/[0-9]+|[^0-9]+/g) ?? []).map((part) => ({
+    kind: /^[0-9]+$/.test(part) ? "numeric" : "text",
+    value: part,
+  }));
+}
+
+/**
+ * Compare Apple build identifiers using deterministic natural ordering.
+ * Numeric runs are compared as integers (so 10 > 2); text runs use a
+ * case-insensitive ordinal comparison. Separators are retained as text.
+ */
+export function compareBuildNumbers(left: string, right: string): number {
+  if (!left || !right) throw new TypeError("Build identifiers must not be empty.");
+  const a = buildParts(left);
+  const b = buildParts(right);
+  const sharedLength = Math.min(a.length, b.length);
+  for (let index = 0; index < sharedLength; index += 1) {
+    const leftPart = a[index]!;
+    const rightPart = b[index]!;
+    if (leftPart.kind !== rightPart.kind) return leftPart.kind === "numeric" ? 1 : -1;
+    if (leftPart.kind === "numeric") {
+      const leftNumber = BigInt(leftPart.value);
+      const rightNumber = BigInt(rightPart.value);
+      if (leftNumber < rightNumber) return -1;
+      if (leftNumber > rightNumber) return 1;
+    } else {
+      const leftText = leftPart.value.toLowerCase();
+      const rightText = rightPart.value.toLowerCase();
+      if (leftText < rightText) return -1;
+      if (leftText > rightText) return 1;
+    }
+  }
+  return a.length < b.length ? -1 : a.length > b.length ? 1 : 0;
+}
+
+export function compareReleaseVersions(
+  leftVersion: string,
+  leftBuild: string,
+  rightVersion: string,
+  rightBuild: string,
+): number {
+  const versionOrder = compareSemanticVersions(leftVersion, rightVersion);
+  return versionOrder === 0 ? compareBuildNumbers(leftBuild, rightBuild) : versionOrder;
 }

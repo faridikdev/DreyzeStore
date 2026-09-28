@@ -22,4 +22,4 @@ export type {
   StoreAppSummary,
   UpdateAvailable,
 } from "./contracts.js";
-export { compareSemanticVersions, isSemanticVersion } from "./semver.js";
+export { compareBuildNumbers, compareReleaseVersions, compareSemanticVersions, isSemanticVersion } from "./semver.js";

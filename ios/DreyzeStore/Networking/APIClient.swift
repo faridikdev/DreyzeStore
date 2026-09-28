@@ -41,9 +41,19 @@ public struct APIClient: Sendable {
 
     public func updates(for installed: [InstalledVersion]) async throws -> [UpdateAvailable] {
         guard installed.count <= 25 else { throw StoreError.invalidRequest }
-        let body = try JSONEncoder().encode(installed.map { ["bundleIdentifier": $0.bundleIdentifier, "installedVersion": $0.installedVersion] })
-        guard let json = String(data: body, encoding: .utf8) else { throw StoreError.invalidRequest }
-        return try await get("updates", query: [URLQueryItem(name: "apps", value: json)], as: [UpdateAvailable].self, cachePolicy: .reloadIgnoringLocalCacheData)
+        let body: Data
+        do { body = try JSONEncoder().encode(UpdateBatchRequest(apps: installed)) }
+        catch { throw StoreError.invalidRequest }
+        return try await request("updates", query: [], envelope: true, as: [UpdateAvailable].self, cachePolicy: .reloadIgnoringLocalCacheData, method: "POST", body: body)
+    }
+
+    public func lookupApps(bundleIdentifiers: [String], channel: AppUpdateChannel) async throws -> [StoreApp] {
+        guard bundleIdentifiers.count <= 25,
+              Set(bundleIdentifiers).count == bundleIdentifiers.count else { throw StoreError.invalidRequest }
+        let body: Data
+        do { body = try JSONEncoder().encode(AppLookupRequest(bundleIdentifiers: bundleIdentifiers, channel: channel.rawValue)) }
+        catch { throw StoreError.invalidRequest }
+        return try await request("apps/lookup", query: [], envelope: true, as: [StoreApp].self, cachePolicy: .reloadIgnoringLocalCacheData, method: "POST", body: body)
     }
 
     public func repositoryManifest() async throws -> RepositoryManifest {
@@ -64,15 +74,15 @@ public struct APIClient: Sendable {
         catch { throw StoreError.decodingFailure }
     }
 
-    private func request<Value: Decodable & Sendable>(_ path: String, query: [URLQueryItem], envelope: Bool, as type: Value.Type, cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Value {
-        let data = try await fetch(path, query: query, cachePolicy: cachePolicy)
+    private func request<Value: Decodable & Sendable>(_ path: String, query: [URLQueryItem], envelope: Bool, as type: Value.Type, cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy, method: String = "GET", body: Data? = nil) async throws -> Value {
+        let data = try await fetch(path, query: query, cachePolicy: cachePolicy, method: method, body: body)
         do {
             if envelope { return try JSONDecoder.dreyzeStore.decode(APIEnvelope<Value>.self, from: data).data }
             return try JSONDecoder.dreyzeStore.decode(Value.self, from: data)
         } catch { throw StoreError.decodingFailure }
     }
 
-    private func fetch(_ path: String, query: [URLQueryItem], cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy) async throws -> Data {
+    private func fetch(_ path: String, query: [URLQueryItem], cachePolicy: NSURLRequest.CachePolicy = .useProtocolCachePolicy, method: String = "GET", body: Data? = nil) async throws -> Data {
         guard !path.isEmpty,
               !path.hasPrefix("/"),
               let relative = URLComponents(string: path),
@@ -93,8 +103,10 @@ public struct APIClient: Sendable {
         }
 
         var request = URLRequest(url: url, cachePolicy: cachePolicy, timeoutInterval: 20)
-        request.httpMethod = "GET"
+        request.httpMethod = method
+        request.httpBody = body
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if body != nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
         do {
             let (data, response) = try await session.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw StoreError.invalidResponse }
@@ -116,6 +128,15 @@ public struct APIClient: Sendable {
     private static func pathComponent(_ value: String) -> String {
         value.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed.subtracting(CharacterSet(charactersIn: "/?#"))) ?? ""
     }
+}
+
+private struct UpdateBatchRequest: Encodable {
+    let apps: [InstalledVersion]
+}
+
+private struct AppLookupRequest: Encodable {
+    let bundleIdentifiers: [String]
+    let channel: String
 }
 
 private extension APIEnvelope where Value == [StoreApp] {

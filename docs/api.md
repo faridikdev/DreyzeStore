@@ -99,12 +99,21 @@ Searches app name, developer, bundle identifier, description, and category using
 GET /api/v1/search?q=orbit&sort=name&limit=10
 ```
 
-### `GET /updates?apps={JSON}`
+### `POST /updates`
 
-Pass a URL-encoded JSON array with at most 25 unique installed app entries. Each item must contain exactly `bundleIdentifier` and `installedVersion`, both valid strings. The response includes only apps with a newer published **stable** release, determined using semantic version precedence.
+The iOS client sends at most 25 unique device-inventory records per JSON request. Each item contains a canonical `bundleIdentifier`, installed `version`, optional `build`, and selected `channel` (`stable` or `beta`). The legacy GET form remains for existing clients; new clients should use POST to avoid putting inventory in URLs. Updates compare semantic versions first and natural build identifiers only when versions are equal. Stable requests never receive beta-only releases.
 
 ```http
-GET /api/v1/updates?apps=%5B%7B%22bundleIdentifier%22%3A%22com.dreyze.orbittimer%22%2C%22installedVersion%22%3A%221.9.0%22%7D%5D
+POST /api/v1/updates
+Content-Type: application/json
+```
+
+```json
+{
+  "apps": [
+    { "bundleIdentifier": "com.dreyze.orbittimer", "version": "1.9", "build": "9", "channel": "stable" }
+  ]
+}
 ```
 
 ```json
@@ -112,14 +121,20 @@ GET /api/v1/updates?apps=%5B%7B%22bundleIdentifier%22%3A%22com.dreyze.orbittimer
   "data": [
     {
       "app": { "id": "app-orbit-timer", "bundleIdentifier": "com.dreyze.orbittimer", "name": "Orbit Timer" },
-      "installedVersion": "1.9.0",
-      "latestVersion": { "version": "1.10.0", "build": "10", "minimumOSVersion": "16.0", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "size": 1000000, "channel": "stable" }
+      "installedVersion": "1.9",
+      "installedBuild": "9",
+      "channel": "stable",
+      "latestVersion": { "version": "1.10.0", "build": "10", "minimumOSVersion": "16.0", "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", "size": 1000000, "downloadURL": "https://cdn.example.invalid/packages/orbit/1.10.0/10.ipa", "publishedAt": "2026-09-27T12:00:00.000Z", "channel": "stable" }
     }
   ]
 }
 ```
 
-The sample is abbreviated for readability; actual app and version objects use the shared DTOs. Duplicate bundle identifiers, malformed JSON, invalid versions, lists over 25 entries, or encoded request data over 2500 characters are rejected. Updates responses use `Cache-Control: no-store` because their URL contains installed-app inventory.
+The sample is abbreviated for readability; actual app and version objects use the shared DTOs. Duplicate bundle identifiers, malformed JSON, invalid versions/build identifiers, unsupported channels, lists over 25 entries, or oversized request bodies are rejected. Updates responses use `Cache-Control: no-store` because they depend on installed-app inventory.
+
+### `POST /apps/lookup`
+
+Resolves up to 25 canonical bundle identifiers to the latest published app metadata in one selected channel. Used to show the **Up to Date** section only for records that exist in the public catalog. Draft, rejected, unpublished, and staging releases are excluded. Request: `{ "bundleIdentifiers": ["com.dreyze.orbittimer"], "channel": "stable" }`. The endpoint is no-store and returns the normal app summaries in `{ "data": [...] }`.
 
 ### `GET /repository`
 
@@ -143,7 +158,7 @@ Errors do not include SQL, stack traces, bucket keys, or D1 internals. Validatio
 
 ## Caching and CORS
 
-Stable public catalog reads use `ETag` and bounded `Cache-Control` lifetimes and support `If-None-Match` (`304 Not Modified`). `/updates` is `no-store`. Errors are `no-store`. CORS only reflects exact origins listed in `ADMIN_ORIGINS`; it is not a wildcard. The local setting permits the Vite dev origin.
+Stable public catalog reads use `ETag` and bounded `Cache-Control` lifetimes and support `If-None-Match` (`304 Not Modified`). `/updates` and `/apps/lookup` are `no-store`. Errors are `no-store`. CORS only reflects exact origins listed in `ADMIN_ORIGINS`; it is not a wildcard. The local setting permits the Vite dev origin.
 
 ## Admin and validator APIs
 

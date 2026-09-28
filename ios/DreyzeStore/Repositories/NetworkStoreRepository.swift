@@ -36,6 +36,12 @@ public actor NetworkStoreRepository: StoreRepository {
         try await cached(key: "versions:\(appID)") { try await self.client.versions(appID: appID) }
     }
 
+    public func lookupApps(bundleIdentifiers: [String], channel: AppUpdateChannel) async throws -> [StoreApp] {
+        guard bundleIdentifiers.count <= 25 else { throw StoreError.invalidRequest }
+        let key = "lookup:\(channel.rawValue):\(bundleIdentifiers.sorted().joined(separator: ","))"
+        return try await cached(key: key) { try await self.client.lookupApps(bundleIdentifiers: bundleIdentifiers, channel: channel) }
+    }
+
     public func updates(for installed: [InstalledVersion]) async throws -> [UpdateAvailable] {
         try await client.updates(for: installed)
     }

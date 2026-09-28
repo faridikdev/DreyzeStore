@@ -53,6 +53,11 @@
 		00000000000000000000022E /* WindowsCompanionPairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000135 /* WindowsCompanionPairingView.swift */; };
 		00000000000000000000022F /* WindowsCompanionQRScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000136 /* WindowsCompanionQRScanner.swift */; };
 		000000000000000000000230 /* WindowsCompanionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000137 /* WindowsCompanionTests.swift */; };
+		000000000000000000000231 /* InstalledInventoryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000138 /* InstalledInventoryService.swift */; };
+		000000000000000000000232 /* UpdateHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000139 /* UpdateHistoryStore.swift */; };
+		000000000000000000000233 /* UpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000140 /* UpdatesViewModel.swift */; };
+		000000000000000000000234 /* UpdateNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000141 /* UpdateNotificationService.swift */; };
+		000000000000000000000235 /* UpdatesPhase7Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000142 /* UpdatesPhase7Tests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -112,6 +117,11 @@
 		000000000000000000000135 /* WindowsCompanionPairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsCompanionPairingView.swift; sourceTree = "<group>"; };
 		000000000000000000000136 /* WindowsCompanionQRScanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsCompanionQRScanner.swift; sourceTree = "<group>"; };
 		000000000000000000000137 /* WindowsCompanionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsCompanionTests.swift; sourceTree = "<group>"; };
+		000000000000000000000138 /* InstalledInventoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstalledInventoryService.swift; sourceTree = "<group>"; };
+		000000000000000000000139 /* UpdateHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateHistoryStore.swift; sourceTree = "<group>"; };
+		000000000000000000000140 /* UpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesViewModel.swift; sourceTree = "<group>"; };
+		000000000000000000000141 /* UpdateNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateNotificationService.swift; sourceTree = "<group>"; };
+		000000000000000000000142 /* UpdatesPhase7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesPhase7Tests.swift; sourceTree = "<group>"; };
 		000000000000000000000115 /* DreyzeStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000116 /* DreyzeStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreyzeStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -149,9 +159,9 @@
 		000000000000000000000012 /* Core */ = {isa = PBXGroup; children = (000000000000000000000103, 000000000000000000000104,); path = Core; sourceTree = "<group>"; };
 		000000000000000000000013 /* Models */ = {isa = PBXGroup; children = (000000000000000000000105, 000000000000000000000106,); path = Models; sourceTree = "<group>"; };
 		000000000000000000000014 /* Networking */ = {isa = PBXGroup; children = (000000000000000000000107,); path = Networking; sourceTree = "<group>"; };
-		000000000000000000000015 /* Services */ = {isa = PBXGroup; children = (000000000000000000000108, 000000000000000000000118,); path = Services; sourceTree = "<group>"; };
+		000000000000000000000015 /* Services */ = {isa = PBXGroup; children = (000000000000000000000108, 000000000000000000000118, 000000000000000000000138, 000000000000000000000141,); path = Services; sourceTree = "<group>"; };
 		000000000000000000000016 /* Repositories */ = {isa = PBXGroup; children = (000000000000000000000109, 000000000000000000000117,); path = Repositories; sourceTree = "<group>"; };
-		000000000000000000000017 /* Persistence */ = {isa = PBXGroup; children = (00000000000000000000010A,); path = Persistence; sourceTree = "<group>"; };
+		000000000000000000000017 /* Persistence */ = {isa = PBXGroup; children = (00000000000000000000010A, 000000000000000000000139,); path = Persistence; sourceTree = "<group>"; };
 		000000000000000000000018 /* Security */ = {isa = PBXGroup; children = (00000000000000000000010B, 00000000000000000000012A,); path = Security; sourceTree = "<group>"; };
 		000000000000000000000019 /* Installation */ = {isa = PBXGroup; children = (00000000000000000000010C, 00000000000000000000012D, 00000000000000000000012E, 00000000000000000000012F, 000000000000000000000130, 000000000000000000000131, 000000000000000000000133, 000000000000000000000134, 000000000000000000000135, 000000000000000000000136,); path = Installation; sourceTree = "<group>"; };
 		000000000000000000000035 /* Downloads */ = {isa = PBXGroup; children = (000000000000000000000126, 000000000000000000000127, 000000000000000000000128, 000000000000000000000129, 00000000000000000000012B,); path = Downloads; sourceTree = "<group>"; };
@@ -174,9 +184,9 @@
 		000000000000000000000030 /* Today */ = {isa = PBXGroup; children = (00000000000000000000010F,); path = Today; sourceTree = "<group>"; };
 		000000000000000000000031 /* Apps */ = {isa = PBXGroup; children = (000000000000000000000110, 000000000000000000000122,); path = Apps; sourceTree = "<group>"; };
 		000000000000000000000032 /* Search */ = {isa = PBXGroup; children = (000000000000000000000111,); path = Search; sourceTree = "<group>"; };
-		000000000000000000000033 /* Updates */ = {isa = PBXGroup; children = (000000000000000000000112,); path = Updates; sourceTree = "<group>"; };
+		000000000000000000000033 /* Updates */ = {isa = PBXGroup; children = (000000000000000000000112, 000000000000000000000140,); path = Updates; sourceTree = "<group>"; };
 		000000000000000000000034 /* Library */ = {isa = PBXGroup; children = (000000000000000000000113,); path = Library; sourceTree = "<group>"; };
-		000000000000000000000022 /* Tests */ = {isa = PBXGroup; children = (000000000000000000000114, 000000000000000000000123, 00000000000000000000012C, 000000000000000000000132, 000000000000000000000137,); path = Tests; sourceTree = "<group>"; };
+		000000000000000000000022 /* Tests */ = {isa = PBXGroup; children = (000000000000000000000114, 000000000000000000000123, 00000000000000000000012C, 000000000000000000000132, 000000000000000000000137, 000000000000000000000142,); path = Tests; sourceTree = "<group>"; };
 		000000000000000000000023 /* Products */ = {isa = PBXGroup; children = (000000000000000000000115, 000000000000000000000116,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -266,10 +276,14 @@
 				00000000000000000000022D,
 				00000000000000000000022E,
 				00000000000000000000022F,
+				000000000000000000000231,
+				000000000000000000000232,
+				000000000000000000000233,
+				000000000000000000000234,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		000000000000000000000603 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000214, 00000000000000000000021B, 000000000000000000000223, 00000000000000000000022B, 000000000000000000000230,); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000603 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (000000000000000000000214, 00000000000000000000021B, 000000000000000000000223, 00000000000000000000022B, 000000000000000000000230, 000000000000000000000235,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */

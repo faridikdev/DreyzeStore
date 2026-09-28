@@ -228,6 +228,34 @@ struct CompanionInstalledApp: Decodable {
     let build: String?
 }
 
+private struct CompanionInventoryApp: Decodable {
+    let originalBundleIdentifier: String?
+    let installedBundleIdentifier: String
+    let version: String?
+    let build: String?
+    let releaseSHA256: String?
+    let teamIdentifier: String?
+    let provisionExpiration: Date?
+    let installedAt: Date?
+    let deviceIdentifier: String
+    let source: InstalledAppSource
+
+    var record: InstalledAppRecord {
+        InstalledAppRecord(
+            originalBundleIdentifier: originalBundleIdentifier,
+            installedBundleIdentifier: installedBundleIdentifier,
+            version: version,
+            build: build,
+            releaseSHA256: releaseSHA256,
+            teamIdentifier: teamIdentifier,
+            provisionExpiration: provisionExpiration,
+            installedAt: installedAt,
+            deviceIdentifier: deviceIdentifier,
+            source: source
+        )
+    }
+}
+
 struct CompanionInstallReceipt: Decodable {
     let requestID: String
     let state: String
@@ -481,12 +509,56 @@ private struct WindowsCompanionService {
         _ = try await request(path: "uninstall", method: "POST", body: body)
     }
 
-    func installedApps(udid: String) async throws -> [CompanionInstalledApp] {
+    func installedApps(udid: String) async throws -> [CompanionInventoryApp] {
         var parts = URLComponents(url: record.endpoint.appendingPathComponent("apps"), resolvingAgainstBaseURL: false)
         parts?.queryItems = [URLQueryItem(name: "udid", value: udid)]
         guard let url = parts?.url else { throw CompanionClientError.invalidResponse }
         let response = try await session.data(for: authenticatedRequest(url: url))
-        return try JSONDecoder.companion.decode([CompanionInstalledApp].self, from: response.data)
+        return try JSONDecoder.companion.decode([CompanionInventoryApp].self, from: response.data)
+    }
+
+    func refresh(
+        udid: String,
+        originalBundleIdentifier: String,
+        installedBundleIdentifier: String,
+        version: String,
+        build: String,
+        onProgress: @escaping @Sendable (InstallationProgress) async -> Void
+    ) async throws -> InstalledApplication {
+        await onProgress(.connectingToCompanion)
+        let body = try JSONEncoder.companion.encode(RefreshBody(udid: udid, bundleIdentifier: originalBundleIdentifier))
+        let acceptedResponse = try await request(path: "refresh", method: "POST", body: body)
+        let accepted = try JSONDecoder.companion.decode(CompanionInstallReceipt.self, from: acceptedResponse.data)
+        guard acceptedResponse.status == 202, UUID(uuidString: accepted.requestID) != nil else {
+            throw CompanionClientError.invalidResponse
+        }
+        for _ in 0..<1_800 {
+            try Task.checkCancellation()
+            let receipt: CompanionInstallReceipt = try await json(path: "install/\(accepted.requestID)")
+            switch receipt.state {
+            case "received": break
+            case "verifying": await onProgress(.verifyingOnCompanion)
+            case "provisioning", "signing": await onProgress(.signing)
+            case "installing", "confirming": await onProgress(.installing)
+            case "installed":
+                guard let app = receipt.detail?.app,
+                      app.bundleIdentifier == installedBundleIdentifier,
+                      app.version == version,
+                      app.build == build else { throw CompanionClientError.installationUnconfirmed }
+                return InstalledApplication(
+                    bundleIdentifier: app.bundleIdentifier,
+                    version: version,
+                    build: app.build,
+                    sourceIdentifier: "windows-companion-refresh",
+                    installedAt: receipt.detail?.installedAt
+                )
+            case "failed": throw CompanionClientError.server(409, receipt.detail?.message ?? "Signing refresh failed on Windows Companion.")
+            case "cancelled": throw CancellationError()
+            default: throw CompanionClientError.invalidResponse
+            }
+            try await Task.sleep(for: .seconds(1))
+        }
+        throw CompanionClientError.server(408, "The Companion did not finish signing refresh before the local request timed out.")
     }
 
     private func json<T: Decodable>(path: String) async throws -> T {
@@ -536,7 +608,12 @@ private struct UninstallBody: Encodable {
     let bundleIdentifier: String
 }
 
-public final class WindowsCompanionInstallationBackend: InstallationBackend, @unchecked Sendable {
+private struct RefreshBody: Encodable {
+    let udid: String
+    let bundleIdentifier: String
+}
+
+public final class WindowsCompanionInstallationBackend: InstallationBackend, InstalledAppRefreshing, InstalledAppInventoryProviding, @unchecked Sendable {
     public let identifier = "windows-companion"
     public let capabilities: InstallationCapabilities = [.confirmedInstall, .installedState, .inventory, .uninstall]
     private let activeRequestLock = NSLock()
@@ -550,6 +627,75 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, @un
         "Windows Companion"
     }
 
+    public var expectedDeviceIdentifier: String? {
+        WindowsCompanionPairingStore.load()?.deviceUDID.map(Self.deviceIdentifier(for:))
+    }
+
+    public func fetchInstalledInventory() async throws -> InstalledInventorySnapshot {
+        guard let pairing = WindowsCompanionPairingStore.load(),
+              let udid = pairing.deviceUDID, !pairing.token.isEmpty else {
+            throw CompanionClientError.noTrustedDevice
+        }
+        let expectedIdentifier = Self.deviceIdentifier(for: udid)
+        let entries = try await WindowsCompanionService(record: pairing).installedApps(udid: udid)
+        guard entries.allSatisfy({ $0.deviceIdentifier == expectedIdentifier }) else {
+            throw CompanionClientError.invalidResponse
+        }
+        let records = entries.map(\.record)
+        guard records.allSatisfy({ record in
+            record.installedBundleIdentifier.range(of: "^[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$", options: .regularExpression) != nil
+                && (record.source != .companionConfirmed || (
+                    record.originalBundleIdentifier != nil && record.version != nil && record.build != nil
+                        && record.releaseSHA256?.range(of: "^[a-f0-9]{64}$", options: .regularExpression) != nil
+                ))
+        }) else { throw CompanionClientError.invalidResponse }
+        return InstalledInventorySnapshot(
+            records: records,
+            lastChecked: Date(),
+            deviceIdentifier: expectedIdentifier,
+            isLive: true
+        )
+    }
+
+    public func refreshInstalledApp(_ app: InstalledAppRecord) async -> InstallationDirective {
+        guard app.source == .companionConfirmed,
+              let version = app.version,
+              let build = app.build,
+              let pairing = WindowsCompanionPairingStore.load(),
+              let udid = pairing.deviceUDID,
+              app.deviceIdentifier == Self.deviceIdentifier(for: udid) else {
+            return .unsupported(.configurationRequired("A Companion-confirmed installation record on the paired iPhone is required to refresh this app.")))
+        }
+        await refreshAvailability()
+        guard availability == .available else {
+            return .unsupported(.configurationRequired("Reconnect Windows Companion and provide a current matching signing profile before refreshing."))
+        }
+        do {
+            let installed = try await WindowsCompanionService(record: pairing).refresh(
+                udid: udid,
+                originalBundleIdentifier: app.canonicalBundleIdentifier,
+                installedBundleIdentifier: app.installedBundleIdentifier,
+                version: version,
+                build: build,
+                onProgress: { _ in }
+            )
+            return .installed(installed)
+        } catch is CancellationError {
+            return .cancelled
+        } catch {
+            return .failed(InstallationFailure(
+                code: .installationFailed,
+                title: "Signing Refresh Failed",
+                userMessage: error.localizedDescription,
+                technicalDetails: String(reflecting: error)
+            ))
+        }
+    }
+
+    private static func deviceIdentifier(for udid: String) -> String {
+        SHA256.hash(data: Data(udid.lowercased().utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     public var availability: BackendAvailability {
         guard let record = WindowsCompanionPairingStore.load(), !record.token.isEmpty else {
             return .requiresConfiguration(reason: "Pair DreyzeStore with a Windows Companion on the same trusted local network.")
@@ -557,8 +703,14 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, @un
         guard record.deviceUDID != nil else {
             return .unavailable(reason: record.connectionError ?? "Connect and trust an iPhone in Windows Companion.")
         }
+        if let connectionError = record.connectionError {
+            return .unavailable(reason: connectionError)
+        }
         if record.developerMode == false {
             return .requiresConfiguration(reason: "Enable Developer Mode on the paired iPhone in Settings → Privacy & Security.")
+        }
+        if let expiration = record.provisioningExpiresAt, expiration <= Date() {
+            return .requiresConfiguration(reason: "The imported provisioning profile has expired. Replace it in Windows Companion before installing or refreshing apps.")
         }
         guard record.signingConfigured else {
             return .requiresConfiguration(reason: "Import a local Apple Development identity and device-matched provisioning profile in Windows Companion.")
@@ -573,8 +725,6 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, @un
             try WindowsCompanionPairingStore.save(updated)
         } catch {
             var updated = record
-            updated.deviceUDID = nil
-            updated.deviceName = nil
             updated.connectionError = "Could not reach the paired Windows Companion. Check that both devices are on the same network."
             try? WindowsCompanionPairingStore.save(updated)
         }
@@ -638,7 +788,7 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, @un
         do {
             try await WindowsCompanionService(record: record).uninstall(udid: udid, bundleIdentifier: bundleIdentifier)
             let remaining = try await WindowsCompanionService(record: record).installedApps(udid: udid)
-            guard !remaining.contains(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            guard !remaining.contains(where: { $0.installedBundleIdentifier == bundleIdentifier }) else {
                 return .failed(InstallationFailure(code: .installationUnconfirmed, title: "Removal Couldn’t Be Confirmed", userMessage: "The iPhone still reports this app as installed.", technicalDetails: "Companion inventory still contains \(bundleIdentifier)."))
             }
             return .uninstalled
@@ -653,9 +803,9 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, @un
         }
         do {
             guard let app = try await WindowsCompanionService(record: record).installedApps(udid: udid)
-                .first(where: { $0.bundleIdentifier == bundleIdentifier }) else { return .notInstalled }
+                .first(where: { $0.installedBundleIdentifier == bundleIdentifier }) else { return .notInstalled }
             return .installed(InstalledApplication(
-                bundleIdentifier: app.bundleIdentifier,
+                bundleIdentifier: app.installedBundleIdentifier,
                 version: app.version ?? "Unknown",
                 build: app.build,
                 sourceIdentifier: "windows-companion-device-inventory"

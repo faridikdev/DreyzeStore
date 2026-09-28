@@ -2,7 +2,7 @@
 
 [English](README.md) · **Русский**
 
-DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 6 добавляет публикацию релизов после review; PHASE 6.5 — Windows Companion; PHASE 6.6 — настройку signing-файлов, диагностику устройства и ограниченный тестовый install flow.**
+DreyzeStore — открытый проект нативного каталога iOS, клиента проверки пакетов, API на Cloudflare Workers, формата репозитория, панели публикации и локального Windows Companion для подписи и установки приложений на устройства разработки. **PHASE 7 добавляет подтверждённый Companion inventory, поиск опубликованных обновлений, проверенную установку обновлений, refresh подписи и локальную историю.**
 
 iOS-клиент скачивает опубликованные пакеты и проверяет SHA-256 и структуру IPA. На обычной iOS он может спариться с Windows Companion через локальное TLS-соединение с закреплённым сертификатом. Windows повторно проверяет пакет, подписывает локально импортованной Apple Development identity, устанавливает через доверенный USB-сервис устройства и подтверждает точные bundle ID/version/build по inventory. Только после этого интерфейс сообщает **Installed**. Apple Account/2FA и автоматическое создание Personal Team профиля не реализованы: Apple документирует этот путь через Xcode на Mac. Локальный Test Installation принимает только собственные/разрешённые тестовые приложения с bundle ID `org.dreyzestore.test.*`. Установка на физическом iPhone пока **НЕ ПРОВЕРЕНА**. Передача в TrollStore остаётся отдельным необязательным путём для совместимых сред и сообщает **Handed Off**, а не **Installed**.
 
@@ -13,10 +13,11 @@ iOS-клиент скачивает опубликованные пакеты и
 - `admin` — адаптивная панель на React, TypeScript и Vite для черновиков, загрузки ресурсов, review релизов, Today/featured и публикации.
 - `apps/windows-companion` — Tauri 2/React UI и Rust API, интеграция с USB device service, DPAPI/Credential Manager, повторная проверка IPA, локальная подпись через `zsign`, установка, подтверждение, inventory, uninstall и refresh того же релиза.
 - `shared/schemas` — версионированная JSON Schema репозитория и общая проверка DTO.
+- `docs/updates.md` и `docs/refresh.md` — inventory, каналы, подтверждение обновлений, хранение пакетов и refresh подписи.
 - `scripts/validate_ipa.py` — изолированный ограниченный валидатор IPA, запускаемый workflow GitHub Actions.
 - `.github/workflows/ci.yml` — проверки backend/admin, macOS-сборка iOS Simulator и Windows-тесты/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — проверка выбранной загрузки с аутентификацией OIDC.
 
-Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [исследование Apple signing](docs/apple-signing.md), [физическая проверка iPhone](docs/physical-device-install-test.md), [TrollStore handoff](docs/physical-device-trollstore-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
+Документация: [архитектура](docs/architecture.md), [API](docs/api.md), [обновления](docs/updates.md), [refresh подписи](docs/refresh.md), [панель администратора](docs/admin.md), [создание первого администратора](docs/admin-bootstrap.md), [загрузка и публикация](docs/upload-pipeline.md), [валидатор](docs/validator.md), [Windows Companion](docs/windows-companion.md), [исследование Apple signing](docs/apple-signing.md), [физическая проверка iPhone](docs/physical-device-install-test.md), [TrollStore handoff](docs/physical-device-trollstore-test.md), [безопасность](docs/security.md), [установка](docs/installation.md), [лицензии](docs/licenses.md), [развёртывание](docs/deployment.md).
 
 ## Требования
 

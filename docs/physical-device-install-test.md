@@ -60,7 +60,13 @@ If signing, installation, or inventory confirmation fails, save the user-facing 
 
 The normal DreyzeStore route starts with an iOS `VerifiedPackage` from a reachable catalog release, pairs the iPhone to Windows in **Settings → Installation → Connect Windows Companion**, and transfers that verified package over the pinned local TLS connection. Use a non-production catalog and an owner-authorized package. Repository seed URLs use `.invalid` and cannot provide an installable package. The Windows test action above is available without a production catalog and does not upload the IPA to the store backend.
 
-## 7. Report the outcome
+## 7. Phase 7 update and refresh check
+
+After a Companion install is confirmed, publish or configure an owner-authorized newer build of the same test app in a private/local development catalog. Open DreyzeStore → Updates and refresh. Confirm the installed old version/build comes from the live Companion inventory, then run **Update** and wait for download, checksum/package inspection, Companion signing/install, and a second live inventory read. DreyzeStore should show **Updated** only when inventory reports the exact new signed bundle ID, version, and build. If Companion disconnects before confirmation, DreyzeStore must not show Updated. The prior app remains reported until a later live inventory confirms replacement.
+
+For signing refresh, use a profile nearing its real expiry and verify the profile expiration changes in the new live inventory while the app version/build stay the same. Do not change the PC clock or edit local installation records to simulate expiry. Refresh All should process apps serially and report each result separately.
+
+## 8. Report the outcome
 
 Record the Windows/Companion build, `pymobiledevice3` version, iPhone model and iOS build, certificate/profile expiry, test app bundle ID/version/build, and whether device inventory confirmed both installation and removal. Keep the full UDID, passwords, pairing token, private key, P12, profile, and IPA out of logs/issues.
 

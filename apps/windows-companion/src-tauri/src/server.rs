@@ -107,6 +107,29 @@ struct RefreshRequest {
     bundle_identifier: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum InventorySource {
+    CompanionConfirmed,
+    LocalRecordOnly,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryEntry {
+    original_bundle_identifier: Option<String>,
+    installed_bundle_identifier: String,
+    version: Option<String>,
+    build: Option<String>,
+    release_sha256: Option<String>,
+    team_identifier: Option<String>,
+    provision_expiration: Option<chrono::DateTime<Utc>>,
+    installed_at: Option<chrono::DateTime<Utc>>,
+    device_identifier: String,
+    source: InventorySource,
+}
+
 #[derive(Deserialize)]
 struct InventoryQuery {
     udid: String,
@@ -510,9 +533,58 @@ async fn installed_apps(
         return problem(StatusCode::BAD_REQUEST, "invalid device UDID");
     }
     match state.coordinator.inventory(&query.udid).await {
-        Ok(apps) => Json(apps).into_response(),
+        Ok(apps) => {
+            let records = state.records.read().await;
+            let entries = map_inventory_entries(apps, &records, &query.udid);
+            Json(entries).into_response()
+        }
         Err(error) => problem(StatusCode::SERVICE_UNAVAILABLE, &error.to_string()),
     }
+}
+
+fn map_inventory_entries(
+    apps: Vec<crate::models::InstalledApp>,
+    records: &HashMap<String, InstallRecord>,
+    udid: &str,
+) -> Vec<InventoryEntry> {
+    let device_identifier = hex::encode(Sha256::digest(udid.to_ascii_lowercase().as_bytes()));
+    apps.into_iter()
+        .map(|app| {
+            let matched = records.values().find(|record| {
+                record.udid.eq_ignore_ascii_case(udid)
+                    && record
+                        .signed_bundle_identifier
+                        .eq_ignore_ascii_case(&app.bundle_identifier)
+            });
+            let source = matched
+                .map(|record| {
+                    if app.version.as_deref() == Some(record.version.as_str())
+                        && app.build.as_deref() == Some(record.build.as_str())
+                    {
+                        InventorySource::CompanionConfirmed
+                    } else {
+                        InventorySource::LocalRecordOnly
+                    }
+                })
+                .unwrap_or(InventorySource::Unknown);
+            let confirmed = (source == InventorySource::CompanionConfirmed)
+                .then_some(matched)
+                .flatten();
+            InventoryEntry {
+                original_bundle_identifier: matched.map(|record| record.bundle_identifier.clone()),
+                installed_bundle_identifier: app.bundle_identifier,
+                version: app.version,
+                build: app.build,
+                release_sha256: confirmed.map(|record| record.sha256.clone()),
+                team_identifier: confirmed.and_then(|record| record.team_identifier.clone()),
+                provision_expiration: confirmed
+                    .and_then(|record| record.provisioning_expires_at.clone()),
+                installed_at: confirmed.and_then(|record| record.installed_at.clone()),
+                device_identifier: device_identifier.clone(),
+                source,
+            }
+        })
+        .collect()
 }
 
 async fn uninstall(
@@ -997,6 +1069,69 @@ mod tests {
             Uuid::new_v4().to_string().parse().unwrap(),
         );
         headers
+    }
+
+    fn companion_record(udid: &str) -> InstallRecord {
+        InstallRecord {
+            bundle_identifier: "com.example.original".into(),
+            signed_bundle_identifier: "com.example.signed".into(),
+            version: "2.0".into(),
+            build: "200".into(),
+            minimum_os_version: Some("16.0".into()),
+            app_name: "Example".into(),
+            sha256: "a".repeat(64),
+            size: 123,
+            udid: udid.into(),
+            original_file: format!("{}.ipa", "a".repeat(64)),
+            installed_at: Some(Utc::now()),
+            provisioning_expires_at: Some(Utc::now() + chrono::Duration::days(10)),
+            certificate_expires_at: None,
+            team_identifier: Some("TEAM123".into()),
+        }
+    }
+
+    #[test]
+    fn inventory_marks_only_exact_device_version_and_build_as_companion_confirmed() {
+        let udid = "00000000-000000000000000000000001";
+        let mut records = HashMap::new();
+        records.insert("com.example.original".into(), companion_record(udid));
+        let apps = vec![
+            crate::models::InstalledApp {
+                bundle_identifier: "com.example.signed".into(),
+                version: Some("2.0".into()),
+                build: Some("200".into()),
+            },
+            crate::models::InstalledApp {
+                bundle_identifier: "com.example.signed".into(),
+                version: Some("1.0".into()),
+                build: Some("100".into()),
+            },
+            crate::models::InstalledApp {
+                bundle_identifier: "com.example.untracked".into(),
+                version: Some("1.0".into()),
+                build: Some("1".into()),
+            },
+        ];
+
+        let mapped = map_inventory_entries(apps, &records, udid);
+
+        assert_eq!(mapped[0].source, InventorySource::CompanionConfirmed);
+        assert_eq!(
+            mapped[0].original_bundle_identifier.as_deref(),
+            Some("com.example.original")
+        );
+        assert_eq!(
+            mapped[0].release_sha256.as_deref(),
+            Some("a".repeat(64).as_str())
+        );
+        assert_eq!(mapped[1].source, InventorySource::LocalRecordOnly);
+        assert!(mapped[1].release_sha256.is_none());
+        assert_eq!(mapped[2].source, InventorySource::Unknown);
+        assert!(mapped[2].original_bundle_identifier.is_none());
+        assert_ne!(mapped[0].device_identifier, udid);
+        let json = serde_json::to_value(&mapped[0]).unwrap();
+        assert_eq!(json["source"], "companionConfirmed");
+        assert!(json.get("udid").is_none());
     }
 
     #[test]

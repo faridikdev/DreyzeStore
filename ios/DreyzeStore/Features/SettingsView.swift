@@ -19,6 +19,7 @@ struct SettingsView: View {
                 }
                 Section("Store") {
                     NavigationLink { InstallationSettingsView() } label: { Label("Installation", systemImage: "square.and.arrow.down") }
+                    NavigationLink { UpdatePreferencesView() } label: { Label("Updates", systemImage: "arrow.down.circle") }
                     NavigationLink { SimpleSettingsView(title: "Sources", symbol: "externaldrive.connected.to.line.below", message: "This build reads the configured DreyzeStore catalog. Adding and managing repositories will be available in a later phase.") } label: { Label("Sources", systemImage: "externaldrive.connected.to.line.below") }
                     NavigationLink { StorageSettingsView() } label: { Label("Storage", systemImage: "internaldrive") }
                 }
@@ -35,6 +36,68 @@ struct SettingsView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+private struct UpdatePreferencesView: View {
+    @AppStorage("dreyze.updates.channel.v1") private var channel = "stable"
+    @AppStorage("dreyze.updates.signing-warning-days.v1") private var warningDays = 7
+    @AppStorage("dreyze.updates.keep-previous-package.v1") private var keepPrevious = true
+    @AppStorage("dreyze.notifications.enabled.v1") private var notificationsEnabled = false
+    @State private var notificationMessage: String?
+
+    var body: some View {
+        Form {
+            Section("Release Channel") {
+                Picker("Update Channel", selection: $channel) {
+                    Text("Stable").tag("stable")
+                    Text("Beta").tag("beta")
+                }
+                Text(channel == "stable" ? "Only stable releases are considered." : "Beta includes stable releases and published beta releases.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("Signing Refresh") {
+                Stepper(value: $warningDays, in: 1...30) {
+                    LabeledContent("Warn Before Expiration", value: "\(warningDays) days")
+                }
+                Text("The app’s actual provisioning expiration date is used. This preference controls when the warning begins.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("Package Retention") {
+                Toggle("Keep Previous Version", isOn: $keepPrevious)
+                Text("Previous verified packages are kept after a confirmed update. Turn this off to remove them only after the new version is installed and confirmed.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+            Section("Notifications") {
+                Toggle("Updates and Signing Expiration", isOn: notificationBinding)
+                Text("Updates are checked when you open this screen or pull to refresh. iOS does not guarantee a background check schedule.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                if let notificationMessage {
+                    Text(notificationMessage).font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Updates")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var notificationBinding: Binding<Bool> {
+        Binding(get: { notificationsEnabled }, set: { requested in
+            if requested {
+                Task {
+                    let granted = await UpdateNotificationService.shared.requestPermission()
+                    notificationsEnabled = granted
+                    notificationMessage = granted ? "Local notifications are enabled." : "Allow notifications in iPhone Settings to receive signing and update reminders."
+                    if !granted {
+                        await UpdateNotificationService.shared.synchronize(updates: [], installed: [], names: [:], warningDays: warningDays, enabled: false)
+                    }
+                }
+            } else {
+                notificationsEnabled = false
+                notificationMessage = nil
+                Task { await UpdateNotificationService.shared.synchronize(updates: [], installed: [], names: [:], warningDays: warningDays, enabled: false) }
+            }
+        })
     }
 }
 

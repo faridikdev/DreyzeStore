@@ -2,7 +2,7 @@
 
 [English](README.md) · [Русский](README.ru.md)
 
-DreyzeStore is an open-source native iOS catalog, package verification client, Cloudflare Workers API, repository format, administrator publishing panel, and local Windows companion for development signing and installation. The project is developed in phases. **Phase 6 adds reviewed release publishing; Phase 6.5 adds the Windows Companion; Phase 6.6 adds signing-file onboarding, device diagnostics, and a restricted test-install flow.**
+DreyzeStore is an open-source native iOS catalog, package verification client, Cloudflare Workers API, repository format, administrator publishing panel, and local Windows companion for development signing and installation. The project is developed in phases. **Phase 7 adds Companion-confirmed installed inventory, published update detection, verified update installation, signing refresh, and local update history.**
 
 The iOS client downloads and verifies published packages. On stock iOS it can pair to the user's Windows Companion over a pinned local TLS connection; Windows independently verifies, signs with an imported local Apple Development identity, installs over the trusted USB device service, and confirms the exact app through device inventory before reporting **Installed**. Apple Account/2FA login and free Personal Team provisioning are not automated: Apple documents that flow through Xcode on Mac. A local test-install action accepts only user-owned test apps under `org.dreyzestore.test.*`. Physical iPhone installation is still **NOT VERIFIED**. TrollStore document handoff remains a separate optional path for compatible environments and reports **Handed Off**, never **Installed**.
 
@@ -13,6 +13,7 @@ The iOS client downloads and verifies published packages. On stock iOS it can pa
 - `admin` — React/TypeScript/Vite responsive panel for app drafts, asset uploads, release review, featured content, and publishing.
 - `apps/windows-companion` — Tauri 2/React desktop UI and Rust local API, USB device service integration, DPAPI/Credential Manager storage, second-pass IPA validation, local `zsign` signing, install confirmation, inventory, uninstall and same-release refresh.
 - `shared/schemas` — versioned repository JSON Schema and shared DTO validation.
+- `docs/updates.md` and `docs/refresh.md` — update, channel, inventory, confirmation, retention, and signing refresh behavior.
 - `scripts/validate_ipa.py` — isolated, bounded IPA metadata validator used by the GitHub Actions validator workflow.
 - `.github/workflows/ci.yml` — backend/admin checks, macOS iOS simulator build/tests, and Windows Companion tests/unsigned installer artifact. `.github/workflows/validate-ipa.yml` — OIDC-authenticated, per-upload validation workflow.
 

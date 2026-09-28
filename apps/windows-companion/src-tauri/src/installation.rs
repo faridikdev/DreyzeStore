@@ -273,6 +273,7 @@ mod tests {
         available: bool,
         install_succeeds: bool,
         inventory: Mutex<Vec<InstalledApp>>,
+        inventory_after_install: Mutex<Option<Vec<InstalledApp>>>,
     }
     #[async_trait]
     impl DeviceProvider for TestDevice {
@@ -295,6 +296,9 @@ mod tests {
         }
         async fn install(&self, _udid: &str, _package: &Path) -> Result<()> {
             if self.install_succeeds {
+                if let Some(installed) = self.inventory_after_install.lock().unwrap().take() {
+                    *self.inventory.lock().unwrap() = installed;
+                }
                 Ok(())
             } else {
                 Err(CompanionError::Operation("install failed".into()))
@@ -399,16 +403,21 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn installed_state_requires_device_inventory_confirmation_after_sign_and_install() {
+    async fn update_replaces_old_inventory_only_after_install_then_confirms_new_version() {
         let (_dir, path, expected) = fixture();
         let device = Arc::new(TestDevice {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(vec![InstalledApp {
                 bundle_identifier: expected.bundle_identifier.clone(),
+                version: Some("1.0.0".into()),
+                build: Some("13".into()),
+            }]),
+            inventory_after_install: Mutex::new(Some(vec![InstalledApp {
+                bundle_identifier: expected.bundle_identifier.clone(),
                 version: Some(expected.version.clone()),
                 build: Some(expected.build.clone()),
-            }]),
+            }])),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -418,6 +427,15 @@ mod tests {
         let jobs = InstallJobStore::default();
         let token = jobs.insert(expected.request_id.clone()).unwrap();
         let coordinator = PackageInstallCoordinator::new(device, signer.clone(), jobs.clone());
+        assert_eq!(
+            coordinator
+                .inventory("0123456789abcdef0123456789ABCDEF")
+                .await
+                .unwrap()[0]
+                .version
+                .as_deref(),
+            Some("1.0.0")
+        );
         coordinator
             .execute(
                 path,
@@ -431,6 +449,15 @@ mod tests {
             jobs.get("test-install"),
             Some(InstallState::Installed { .. })
         ));
+        let confirmed = coordinator
+            .inventory("0123456789abcdef0123456789ABCDEF")
+            .await
+            .unwrap();
+        assert_eq!(
+            confirmed[0].version.as_deref(),
+            Some(expected.version.as_str())
+        );
+        assert_eq!(confirmed[0].build.as_deref(), Some(expected.build.as_str()));
         assert!(signer.called.load(Ordering::SeqCst));
     }
 
@@ -441,6 +468,7 @@ mod tests {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -474,6 +502,7 @@ mod tests {
             available: false,
             install_succeeds: true,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -504,6 +533,7 @@ mod tests {
             available: true,
             install_succeeds: false,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -537,6 +567,7 @@ mod tests {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -571,6 +602,7 @@ mod tests {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: false,
@@ -605,6 +637,7 @@ mod tests {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(Vec::new()),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,
@@ -641,6 +674,7 @@ mod tests {
             available: true,
             install_succeeds: true,
             inventory: Mutex::new(vec![app]),
+            inventory_after_install: Mutex::new(None),
         });
         let signer = Arc::new(TestSigner {
             success: true,

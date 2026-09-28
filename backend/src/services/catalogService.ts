@@ -1,5 +1,7 @@
 import {
   APP_CATEGORIES,
+  compareBuildNumbers,
+  compareReleaseVersions,
   compareSemanticVersions,
   isSemanticVersion,
 } from "@dreyzestore/shared";
@@ -73,6 +75,8 @@ export interface AppPage {
 export interface UpdateRequestItem {
   bundleIdentifier: string;
   installedVersion: string;
+  installedBuild?: string;
+  channel: "stable" | "beta";
 }
 
 function invalidStoredData(): ApiError {
@@ -257,7 +261,7 @@ function mapScreenshot(row: ScreenshotRow, assetBase: URL): Screenshot {
 
 function sortBySemanticVersion(versions: InternalVersion[]): InternalVersion[] {
   return [...versions].sort((left, right) => {
-    const precedence = compareSemanticVersions(right.api.version, left.api.version);
+    const precedence = compareReleaseVersions(right.api.version, right.api.build, left.api.version, left.api.build);
     if (precedence !== 0) return precedence;
     return right.publishedAt.localeCompare(left.publishedAt) || right.api.id.localeCompare(left.api.id);
   });
@@ -468,25 +472,57 @@ export async function getUpdates(
   const rows = await listPublishedAppsByBundles(environment.DB, requests.map((item) => item.bundleIdentifier));
   const assetBase = configuredAssetBase(environment.PUBLIC_ASSETS_BASE_URL);
   const appIds = rows.map((row) => requiredId(row.app_id));
-  const versions = await loadVersions(environment, appIds, assetBase, true);
-  const installed = new Map(requests.map((item) => [item.bundleIdentifier, item.installedVersion]));
+  const versions = await loadVersions(environment, appIds, assetBase);
+  const installed = new Map(requests.map((item) => [item.bundleIdentifier, item]));
   const updates: UpdateAvailable[] = [];
 
   for (const row of rows) {
     const bundleIdentifier = requiredBundleIdentifier(row.bundle_identifier);
-    const installedVersion = installed.get(bundleIdentifier);
-    if (!installedVersion) continue;
+    const installedItem = installed.get(bundleIdentifier);
+    if (!installedItem) continue;
     const candidates = versions.get(requiredId(row.app_id)) ?? [];
-    const latest = latestVersion(candidates, true);
-    if (!latest || compareSemanticVersions(latest.api.version, installedVersion) <= 0) continue;
+    const eligible = installedItem.channel === "stable"
+      ? candidates.filter((version) => version.channel === "stable")
+      : candidates;
+    const latest = latestVersion(eligible, false);
+    if (!latest) continue;
+    const versionOrder = compareSemanticVersions(latest.api.version, installedItem.installedVersion);
+    const isNewer = versionOrder > 0 || (
+      versionOrder === 0 && installedItem.installedBuild !== undefined &&
+      compareBuildNumbers(latest.api.build, installedItem.installedBuild) > 0
+    );
+    if (!isNewer) continue;
     updates.push({
       app: mapAppSummary(row, latest, assetBase),
-      installedVersion,
+      installedVersion: installedItem.installedVersion,
+      ...(installedItem.installedBuild === undefined ? {} : { installedBuild: installedItem.installedBuild }),
+      channel: installedItem.channel,
       latestVersion: latest.api,
     });
   }
 
   return updates.sort((left, right) => left.app.name.localeCompare(right.app.name));
+}
+
+/** Resolve installed bundle identities to published store records for truthful
+ * Up to Date rendering. Drafts and apps without a published release remain
+ * invisible, just like the rest of the public catalog. */
+export async function lookupPublishedApps(
+  environment: WorkerEnvironment,
+  bundleIdentifiers: string[],
+  channel: "stable" | "beta",
+): Promise<StoreAppSummary[]> {
+  if (bundleIdentifiers.length === 0) return [];
+  const rows = await listPublishedAppsByBundles(environment.DB, bundleIdentifiers);
+  const assetBase = configuredAssetBase(environment.PUBLIC_ASSETS_BASE_URL);
+  const versions = await loadVersions(environment, rows.map((row) => requiredId(row.app_id)), assetBase);
+  const output: StoreAppSummary[] = [];
+  for (const row of rows) {
+    const appID = requiredId(row.app_id);
+    const release = latestVersion(versions.get(appID) ?? [], channel === "stable");
+    if (release) output.push(mapAppSummary(row, release, assetBase));
+  }
+  return output.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function mapRepositoryVersion(version: InternalVersion): RepositoryVersion {

@@ -1,6 +1,8 @@
 import Combine
 import Foundation
 
+public typealias InstallationStateObserver = @MainActor (InstallationState) -> Void
+
 @MainActor
 public final class InstallationCoordinator: ObservableObject {
     public static let shared = InstallationCoordinator(storage: .shared)
@@ -20,6 +22,7 @@ public final class InstallationCoordinator: ObservableObject {
     private var pendingPackageRecord: StoredVerifiedPackage?
     private var activeInstallationBackend: (any InstallationBackend)?
     private var activeInstallationTask: Task<InstallationDirective, Never>?
+    private var stateObserver: InstallationStateObserver?
 
     init(
         storage: PackageStorage,
@@ -220,12 +223,79 @@ public final class InstallationCoordinator: ObservableObject {
         transition(to: .ready)
     }
 
+    /// Update flow deliberately selects the paired Companion only. Other
+    /// installation methods cannot confirm replacement of an installed app.
+    public func installForUpdate(package: VerifiedPackage) async -> InstallationDirective {
+        await installForUpdate(package: package, onState: { _ in })
+    }
+
+    public func installForUpdate(package: VerifiedPackage, onState: @escaping InstallationStateObserver) async -> InstallationDirective {
+        await refreshBackendOptions()
+        guard let option = backendOptions.first(where: { $0.identifier == "windows-companion" }),
+              option.availability == .available,
+              option.capabilities.contains(.confirmedInstall),
+              option.capabilities.contains(.inventory) else {
+            return .unsupported(.unavailable("Windows Companion must be connected, paired, and ready to sign before updating.")))
+        }
+        var backendReportedProgress = false
+        stateObserver = { state in
+            switch state {
+            case .connectingToCompanion, .transferringPackage, .verifyingOnCompanion, .signing, .provisioning:
+                backendReportedProgress = true
+                onState(state)
+            case .installing where !backendReportedProgress:
+                // beginInstall's initial state means the coordinator is about
+                // to contact the Companion; the backend has not started the
+                // actual device installation yet.
+                onState(.connectingToCompanion)
+            default:
+                onState(state)
+            }
+        }
+        defer { stateObserver = nil }
+        if !state.isActive { reset() }
+        await beginInstall(package: package, backendIdentifier: option.identifier)
+        switch state {
+        case .installed(let app): return .installed(app)
+        case .cancelled: return .cancelled
+        case .failed(let failure): return .failed(failure)
+        case .unsupported(let failure): return .unsupported(failure)
+        case .handedOff, .awaitingHandoff:
+            return .failed(InstallationFailure(
+                code: .installationUnconfirmed,
+                title: "Update Couldn’t Be Confirmed",
+                userMessage: "The selected method handed off a file but did not confirm an update.",
+                technicalDetails: "Update flow must complete through Windows Companion inventory."
+            ))
+        default:
+            return .failed(InstallationFailure(
+                code: .installationUnconfirmed,
+                title: "Update Couldn’t Be Confirmed",
+                userMessage: "Installation did not return a confirmed result.",
+                technicalDetails: "Unexpected coordinator state: \(state)"
+            ))
+        }
+    }
+
+    public func refreshInstalledApp(_ app: InstalledAppRecord) async -> InstallationDirective {
+        guard app.source == .companionConfirmed,
+              let backend = backends.first(where: { $0.identifier == "windows-companion" }),
+              let refreshBackend = backend as? any InstalledAppRefreshing else {
+            return .unsupported(.configurationRequired("Refresh requires a Companion-confirmed app and the Windows Companion refresh service.")))
+        }
+        await backend.refreshAvailability()
+        guard backend.availability == .available else {
+            return .unsupported(.unavailable("Reconnect Windows Companion and configure a current signing profile to refresh this app.")))
+        }
+        return await refreshBackend.refreshInstalledApp(app)
+    }
+
     public func uninstall(bundleIdentifier: String, using backendIdentifier: String) async -> UninstallationResult {
         guard bundleIdentifier.range(of: "^[A-Za-z0-9-]+(?:\\.[A-Za-z0-9-]+)+$", options: .regularExpression) != nil,
               let backend = backends.first(where: { $0.identifier == backendIdentifier }) else {
             return .unsupported(reason: "No uninstall-capable installation backend is available.")
         }
-        guard backend.availability == .available, backend.capabilities.contains(.uninstall) else {
+        guard backend.capabilities.contains(.uninstall) else {
             return .unsupported(reason: "This installation method cannot uninstall applications.")
         }
         return await backend.uninstall(bundleIdentifier: bundleIdentifier)
@@ -245,6 +315,7 @@ public final class InstallationCoordinator: ObservableObject {
     private func transition(to nextState: InstallationState) {
         state = nextState
         stateHistory.append(nextState)
+        stateObserver?(nextState)
     }
 
     private func report(_ progress: InstallationProgress, operationID: UUID) {

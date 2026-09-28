@@ -13,6 +13,17 @@ async function get(path) {
   return { response, body: await response.json() };
 }
 
+async function post(path, value) {
+  const response = await fetch(new URL(path, baseUrl), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value),
+  });
+  assert.equal(response.status, 200, `${path}: expected HTTP 200, received ${response.status}`);
+  assert.ok(response.headers.get("x-request-id"), `${path}: missing request ID`);
+  return { response, body: await response.json() };
+}
+
 const health = await get("/api/v1/health");
 assert.deepEqual(health.body.data, { status: "ok", database: "ready" });
 
@@ -43,8 +54,24 @@ const updates = await get(`/api/v1/updates?apps=${updateInput}`);
 assert.equal(updates.body.data[0].latestVersion.version, "1.10.0");
 assert.equal(updates.response.headers.get("cache-control"), "no-store");
 
+const batchedUpdates = await post("/api/v1/updates", {
+  apps: [{ bundleIdentifier: "com.dreyze.orbittimer", version: "1.9.0", build: "9", channel: "stable" }],
+});
+assert.equal(batchedUpdates.body.data[0].latestVersion.version, "1.10.0");
+assert.equal(batchedUpdates.body.data[0].channel, "stable");
+assert.equal(batchedUpdates.response.headers.get("cache-control"), "no-store");
+
+const publishedLookup = await post("/api/v1/apps/lookup", {
+  bundleIdentifiers: ["com.dreyze.orbittimer"],
+  channel: "stable",
+});
+assert.equal(publishedLookup.body.data.length, 1);
+assert.equal(publishedLookup.body.data[0].bundleIdentifier, "com.dreyze.orbittimer");
+assert.equal(publishedLookup.response.headers.get("cache-control"), "no-store");
+assert.ok(!("ipaObjectKey" in publishedLookup.body.data[0].currentVersion));
+
 const repository = await get("/api/v1/repository");
 const repositoryValidation = validateRepository(repository.body);
 assert.equal(repositoryValidation.valid, true, JSON.stringify(repositoryValidation));
 
-console.log("Local D1 API smoke checks passed: health, pagination, details, categories, featured, search, updates, repository schema.");
+console.log("Local D1 API smoke checks passed: health, pagination, details, categories, featured, search, legacy and batched updates, published lookup, repository schema.");

@@ -30,9 +30,18 @@ final class SemanticVersionTests: XCTestCase {
 
     func testInvalidVersionsAreRejected() {
         XCTAssertNil(SemanticVersion("01.2"))
-        XCTAssertNil(SemanticVersion("2"))
+        XCTAssertEqual(SemanticVersion("2"), SemanticVersion("2.0.0"))
+        XCTAssertNil(SemanticVersion("2."))
         XCTAssertNil(SemanticVersion("2.0-"))
         XCTAssertNil(SemanticVersion("2.0+"))
         XCTAssertNil(SemanticVersion("2.0.0-beta.01"))
+    }
+
+    func testVersionComparatorUsesBuildOnlyWhenVersionMatches() {
+        XCTAssertEqual(VersionComparator.compareBuild("2", "10"), .orderedAscending)
+        XCTAssertEqual(VersionComparator.compareBuild("2026.9", "2026.10"), .orderedAscending)
+        XCTAssertTrue(VersionComparator.isNewerRelease(candidateVersion: "1.0", candidateBuild: "10", installedVersion: "1.0.0", installedBuild: "9"))
+        XCTAssertFalse(VersionComparator.isNewerRelease(candidateVersion: "1.0", candidateBuild: "99", installedVersion: "1.1", installedBuild: "1"))
+        XCTAssertTrue(VersionComparator.isNewerRelease(candidateVersion: "2.0-beta", candidateBuild: "1", installedVersion: "1.9", installedBuild: "99"))
     }
 }

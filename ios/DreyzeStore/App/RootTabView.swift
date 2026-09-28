@@ -37,9 +37,9 @@ struct RootTabView: View {
                 .tabItem { Label("Apps", systemImage: "square.grid.2x2") }
             NavigationStack { SearchView(repository: environment.repository) }
                 .tabItem { Label("Search", systemImage: "magnifyingglass") }
-            NavigationStack { UpdatesView() }
+            NavigationStack { UpdatesView(repository: environment.repository) }
                 .tabItem { Label("Updates", systemImage: "arrow.down.circle") }
-            NavigationStack { LibraryView() }
+            NavigationStack { LibraryView(repository: environment.repository) }
                 .tabItem { Label("Library", systemImage: "square.stack") }
         }
         .tint(StorePalette.accent)

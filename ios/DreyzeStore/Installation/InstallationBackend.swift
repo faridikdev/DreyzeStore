@@ -165,6 +165,15 @@ public protocol InstallationBackend: Sendable {
     func queryInstalledState(bundleIdentifier: String) async -> InstalledState
 }
 
+public protocol InstalledAppInventoryProviding: Sendable {
+    var expectedDeviceIdentifier: String? { get }
+    func fetchInstalledInventory() async throws -> InstalledInventorySnapshot
+}
+
+public protocol InstalledAppRefreshing: Sendable {
+    func refreshInstalledApp(_ app: InstalledAppRecord) async -> InstallationDirective
+}
+
 public enum InstallationProgress: Sendable {
     case connectingToCompanion
     case transferringPackage

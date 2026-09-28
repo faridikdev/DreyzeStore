@@ -73,6 +73,22 @@ function updatesURL(values: Array<{ bundleIdentifier: string; installedVersion: 
   return `/api/v1/updates?apps=${encodeURIComponent(JSON.stringify(values))}`;
 }
 
+async function postUpdates(values: Array<{ bundleIdentifier: string; version: string; build: string; channel: "stable" | "beta" }>): Promise<Response> {
+  return app.request("/api/v1/updates", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ apps: values }),
+  }, environment);
+}
+
+async function postAppLookup(bundleIdentifiers: string[], channel: "stable" | "beta" = "stable"): Promise<Response> {
+  return app.request("/api/v1/apps/lookup", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ bundleIdentifiers, channel }),
+  }, environment);
+}
+
 describe("DreyzeStore catalog API", () => {
   it("returns health only when D1 responds and includes a request ID", async () => {
     const response = await request("/api/v1/health");
@@ -168,6 +184,30 @@ describe("DreyzeStore catalog API", () => {
     expect(body.data).not.toContainEqual(expect.objectContaining({ version: "1.2.0" }));
   });
 
+  it("resolves only published apps for update inventory reconciliation", async () => {
+    const response = await postAppLookup([
+      "com.dreyze.auroranotes",
+      "com.dreyze.patchboard",
+      "com.dreyze.hidden",
+    ]);
+    const body = await response.json() as { data: Array<{ bundleIdentifier: string; currentVersion: { version: string } }> };
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(body.data.map((item) => item.bundleIdentifier)).toEqual([
+      "com.dreyze.auroranotes",
+      "com.dreyze.patchboard",
+    ]);
+    expect(body.data.find((item) => item.bundleIdentifier === "com.dreyze.auroranotes")?.currentVersion.version).toBe("1.1.0");
+    const beta = await postAppLookup(["com.dreyze.auroranotes"], "beta");
+    expect((await beta.json() as { data: Array<{ currentVersion: { version: string } }> }).data[0]?.currentVersion.version).toBe("2.0.0-beta.1");
+  });
+
+  it("rejects malformed and oversized app lookup requests", async () => {
+    expect((await postAppLookup(Array.from({ length: 26 }, (_, index) => `com.example.app${index}`))).status).toBe(413);
+    expect((await postAppLookup(["com.example.app", "com.example.app"])).status).toBe(400);
+    expect((await postAppLookup(["com.example.app"], "invalid" as "stable")).status).toBe(400);
+  });
+
   it("returns all canonical categories with published app counts", async () => {
     const response = await request("/api/v1/categories");
     const body = await response.json() as { data: Array<{ id: string; name: string; appCount: number }> };
@@ -243,6 +283,51 @@ describe("DreyzeStore catalog API", () => {
     ]));
     expect(response.status).toBe(200);
     expect((await response.json() as { data: unknown[] }).data).toEqual([]);
+  });
+
+  it("detects a higher build for the same version and never offers a lower release", async () => {
+    const higherBuild = await postUpdates([
+      { bundleIdentifier: "com.dreyze.orbittimer", version: "1.10.0", build: "9", channel: "stable" },
+    ]);
+    expect(higherBuild.status).toBe(200);
+    expect((await higherBuild.json() as { data: Array<{ installedBuild: string; latestVersion: { version: string; build: string; size: number; sha256: string; downloadURL: string } }> }).data).toMatchObject([
+      { installedBuild: "9", latestVersion: { version: "1.10.0", build: "10", size: 1_000_000, sha256: expect.stringMatching(/^[a-f0-9]{64}$/), downloadURL: expect.stringMatching(/^https:\/\//) } },
+    ]);
+
+    const sameBuild = await postUpdates([
+      { bundleIdentifier: "com.dreyze.orbittimer", version: "1.10.0", build: "10", channel: "stable" },
+    ]);
+    expect((await sameBuild.json() as { data: unknown[] }).data).toEqual([]);
+    const installedIsNewer = await postUpdates([
+      { bundleIdentifier: "com.dreyze.orbittimer", version: "1.11.0", build: "1", channel: "stable" },
+    ]);
+    expect((await installedIsNewer.json() as { data: unknown[] }).data).toEqual([]);
+  });
+
+  it("keeps beta releases out of stable update checks and returns beta only to beta users", async () => {
+    const stable = await postUpdates([
+      { bundleIdentifier: "com.dreyze.auroranotes", version: "1.1.0", build: "2", channel: "stable" },
+    ]);
+    expect((await stable.json() as { data: unknown[] }).data).toEqual([]);
+    const beta = await postUpdates([
+      { bundleIdentifier: "com.dreyze.auroranotes", version: "1.1.0", build: "2", channel: "beta" },
+    ]);
+    expect((await beta.json() as { data: Array<{ channel: string; latestVersion: { channel: string; version: string } }> }).data).toMatchObject([
+      { channel: "beta", latestVersion: { channel: "beta", version: "2.0.0-beta.1" } },
+    ]);
+  });
+
+  it("rejects malformed POST bodies, unknown fields, unsupported channels, and oversized batches", async () => {
+    for (const [headers, body] of [
+      [{ "content-type": "text/plain" }, "{}"],
+      [{ "content-type": "application/json" }, "{"],
+      [{ "content-type": "application/json" }, JSON.stringify({ apps: [{ bundleIdentifier: "com.example.app", version: "1", build: "1", channel: "stable", extra: true }] })],
+      [{ "content-type": "application/json" }, JSON.stringify({ apps: [{ bundleIdentifier: "com.example.app", version: "1", build: "1", channel: "nightly" }] })],
+      [{ "content-type": "application/json" }, JSON.stringify({ apps: Array.from({ length: 26 }, (_, index) => ({ bundleIdentifier: `com.example.app${index}`, version: "1", build: "1", channel: "stable" })) })],
+    ] as const) {
+      const response = await app.request("/api/v1/updates", { method: "POST", headers, body }, environment);
+      expect([400, 413, 415]).toContain(response.status);
+    }
   });
 
   it("rejects malformed or ambiguous update inputs", async () => {

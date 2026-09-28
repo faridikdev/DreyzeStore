@@ -43,6 +43,21 @@ final class StorePhase3Tests: XCTestCase {
         XCTAssertTrue(manifest.apps.isEmpty)
     }
 
+    func testBundleLookupUsesBoundedPOSTAndDecodesPublishedApp() async throws {
+        StubURLProtocol.handler = { request in
+            XCTAssertEqual(request.url?.path, "/api/v1/apps/lookup")
+            XCTAssertEqual(request.httpMethod, "POST")
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            XCTAssertEqual(json["bundleIdentifiers"] as? [String], ["com.dreyze.orbittimer"])
+            XCTAssertEqual(json["channel"] as? String, "stable")
+            return (200, Self.appsEnvelope(page: 1, hasMore: false))
+        }
+        defer { StubURLProtocol.handler = nil }
+        let apps = try await Self.client().lookupApps(bundleIdentifiers: ["com.dreyze.orbittimer"], channel: .stable)
+        XCTAssertEqual(apps.first?.bundleIdentifier, "com.dreyze.orbittimer")
+    }
+
     func testSearchAndUpdateEndpointsEncodeTheirQueriesAndDecodeResponses() async throws {
         StubURLProtocol.handler = { request in
             let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems ?? []
@@ -51,16 +66,21 @@ final class StorePhase3Tests: XCTestCase {
                 return (200, Self.appsEnvelope(page: 1, hasMore: false))
             }
             XCTAssertEqual(request.url?.path, "/api/v1/updates")
-            let appsJSON = try XCTUnwrap(query.first(where: { $0.name == "apps" })?.value)
-            let parsedApps = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(appsJSON.utf8)) as? [[String: String]])
-            XCTAssertEqual(parsedApps.first?["bundleIdentifier"], "com.dreyze.orbittimer")
-            XCTAssertEqual(parsedApps.first?["installedVersion"], "1.9.0")
-            return (200, Data(#"{"data":[{"app":{"id":"app-orbit-timer","bundleIdentifier":"com.dreyze.orbittimer","name":"Orbit Timer"},"installedVersion":"1.9.0","latestVersion":{"id":"release-1","version":"1.10.0","build":"10","versionDate":"2026-09-20T10:00:00Z","minimumOSVersion":"16.0","downloadURL":"https://cdn.example.invalid/orbit.ipa","sha256":"\#(String(repeating: "a", count: 64))","size":1200,"releaseNotes":"Faster.","channel":"stable"}}]}"#.utf8))
+            XCTAssertEqual(request.httpMethod, "POST")
+            let body = try XCTUnwrap(request.httpBody)
+            let parsedBody = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let parsedApps = try XCTUnwrap(parsedBody["apps"] as? [[String: Any]])
+            XCTAssertEqual(parsedApps.first?["bundleIdentifier"] as? String, "com.dreyze.orbittimer")
+            XCTAssertEqual(parsedApps.first?["version"] as? String, "1.9.0")
+            XCTAssertEqual(parsedApps.first?["build"] as? String, "9")
+            XCTAssertEqual(parsedApps.first?["channel"] as? String, "stable")
+            let version = #"{"id":"release-1","version":"1.10.0","build":"10","versionDate":"2026-09-20T10:00:00Z","minimumOSVersion":"16.0","downloadURL":"https://cdn.example.invalid/orbit.ipa","sha256":"\#(String(repeating: "a", count: 64))","size":1200,"releaseNotes":"Faster.","channel":"stable"}"#
+            return (200, Data(#"{"data":[{"app":{"id":"app-orbit-timer","bundleIdentifier":"com.dreyze.orbittimer","name":"Orbit Timer","shortDescription":"A local timer.","developer":{"id":"dev-orbit","name":"Orbit Labs"},"category":{"id":"utilities","name":"Utilities","appCount":1},"iconURL":"https://cdn.example.invalid/orbit.png","currentVersion":\#(version),"repositoryIdentifier":"com.dreyze.official","repositoryName":"DreyzeStore"},"installedVersion":"1.9.0","installedBuild":"9","channel":"stable","latestVersion":\#(version)}]}"#.utf8))
         }
         defer { StubURLProtocol.handler = nil }
         let client = try Self.client()
         let search = try await client.search("Orbit Timer")
-        let updates = try await client.updates(for: [InstalledVersion(bundleIdentifier: "com.dreyze.orbittimer", installedVersion: "1.9.0")])
+        let updates = try await client.updates(for: [InstalledVersion(bundleIdentifier: "com.dreyze.orbittimer", installedVersion: "1.9.0", installedBuild: "9")])
         XCTAssertEqual(search.data.first?.name, "Orbit Timer")
         XCTAssertEqual(updates.first?.latestVersion.version, "1.10.0")
     }
@@ -206,5 +226,8 @@ private actor RecordingStoreRepository: StoreRepository {
     func app(id: String) async throws -> StoreLoad<StoreApp> { StoreLoad(value: first, source: .network, receivedAt: Date()) }
     func versions(appID: String) async throws -> StoreLoad<[AppVersion]> { StoreLoad(value: [first.currentVersion], source: .network, receivedAt: Date()) }
     func updates(for installed: [InstalledVersion]) async throws -> [UpdateAvailable] { [] }
+    func lookupApps(bundleIdentifiers: [String], channel: AppUpdateChannel) async throws -> [StoreApp] {
+        [first, second].filter { bundleIdentifiers.contains($0.bundleIdentifier) }
+    }
     func repositoryManifest() async throws -> StoreLoad<RepositoryManifest> { fatalError("Not used by this test") }
 }

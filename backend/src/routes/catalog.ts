@@ -14,6 +14,7 @@ import {
   getFeatured,
   getRepositoryManifest,
   getUpdates,
+  lookupPublishedApps,
   type UpdateRequestItem,
 } from "../services/catalogService.js";
 
@@ -23,6 +24,7 @@ const REPOSITORY_IDENTIFIER_PATTERN = BUNDLE_IDENTIFIER_PATTERN;
 const CATEGORY_IDS = new Set(APP_CATEGORIES.map((name) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-")));
 const MAX_UPDATE_ITEMS = 25;
 const MAX_UPDATE_QUERY_LENGTH = 2500;
+const MAX_LOOKUP_BODY_LENGTH = 8_192;
 
 function parseSort(value: string | undefined): AppSort {
   if (value === undefined || value === "name") return "name";
@@ -73,6 +75,10 @@ function parseUpdateRequests(raw: string | undefined): UpdateRequestItem[] {
   } catch {
     throw validationError("apps", "must contain valid JSON.");
   }
+  return parseUpdateRequestItems(parsed, true);
+}
+
+function parseUpdateRequestItems(parsed: unknown, allowLegacy: boolean): UpdateRequestItem[] {
   if (!Array.isArray(parsed)) throw validationError("apps", "must be a JSON array.");
   if (parsed.length > MAX_UPDATE_ITEMS) {
     throw new ApiError(413, "request_too_large", `A maximum of ${MAX_UPDATE_ITEMS} applications is allowed.`);
@@ -85,11 +91,13 @@ function parseUpdateRequests(raw: string | undefined): UpdateRequestItem[] {
     }
     const record = item as Record<string, unknown>;
     const keys = Object.keys(record).sort();
-    if (keys.join(",") !== "bundleIdentifier,installedVersion") {
-      throw validationError(`apps[${index}]`, "must contain only bundleIdentifier and installedVersion.");
-    }
+    const legacy = allowLegacy && keys.join(",") === "bundleIdentifier,installedVersion";
+    const current = keys.join(",") === "build,bundleIdentifier,channel,version";
+    if (!legacy && !current) throw validationError(`apps[${index}]`, "must contain bundleIdentifier, version, build, and channel.");
     const bundleIdentifier = record["bundleIdentifier"];
-    const installedVersion = record["installedVersion"];
+    const installedVersion = legacy ? record["installedVersion"] : record["version"];
+    const installedBuild = legacy ? undefined : record["build"];
+    const channel = legacy ? "stable" : record["channel"];
     if (
       typeof bundleIdentifier !== "string" ||
       bundleIdentifier.length > 255 ||
@@ -100,9 +108,13 @@ function parseUpdateRequests(raw: string | undefined): UpdateRequestItem[] {
     if (typeof installedVersion !== "string" || installedVersion.length > 100 || !isSemanticVersion(installedVersion)) {
       throw validationError(`apps[${index}].installedVersion`, "must be a valid semantic version.");
     }
+    if (!legacy && installedBuild !== null && (typeof installedBuild !== "string" || installedBuild.length > 64 || !/^[A-Za-z0-9][A-Za-z0-9._+-]*$/.test(installedBuild))) {
+      throw validationError(`apps[${index}].build`, "must be a valid build identifier.");
+    }
+    if (channel !== "stable" && channel !== "beta") throw validationError(`apps[${index}].channel`, "must be stable or beta.");
     if (seen.has(bundleIdentifier)) throw validationError("apps", "must not contain duplicate bundle identifiers.");
     seen.add(bundleIdentifier);
-    return { bundleIdentifier, installedVersion };
+    return { bundleIdentifier, installedVersion, ...(typeof installedBuild === "string" ? { installedBuild } : {}), channel };
   });
 }
 
@@ -191,6 +203,74 @@ export function catalogRoutes(routes: Hono<{
     const requests = parseUpdateRequests(query.get("apps"));
     const updates = await getUpdates(context.env, requests);
     return noStoreJsonResponse(context as ApiContext, { data: updates });
+  });
+
+  routes.post("/updates", async (context) => {
+    readQuery(context.req.url, []);
+    const contentType = context.req.header("content-type") ?? "";
+    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+      throw new ApiError(415, "unsupported_media_type", "The update request must use application/json.");
+    }
+    const contentLength = context.req.header("content-length");
+    if (contentLength !== undefined && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_UPDATE_QUERY_LENGTH * 16)) {
+      throw new ApiError(413, "request_too_large", "The update request is too large.");
+    }
+    const raw = await context.req.text();
+    if (raw.length > MAX_UPDATE_QUERY_LENGTH * 16) {
+      throw new ApiError(413, "request_too_large", "The update request is too large.");
+    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); }
+    catch { throw validationError("body", "must contain valid JSON."); }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw validationError("body", "must be an object containing apps.");
+    }
+    const body = parsed as Record<string, unknown>;
+    if (Object.keys(body).length !== 1 || !Object.hasOwn(body, "apps")) {
+      throw validationError("body", "must contain only apps.");
+    }
+    const updates = await getUpdates(context.env, parseUpdateRequestItems(body["apps"], false));
+    return noStoreJsonResponse(context as ApiContext, { data: updates });
+  });
+
+  routes.post("/apps/lookup", async (context) => {
+    readQuery(context.req.url, []);
+    const contentType = context.req.header("content-type") ?? "";
+    if (!/^application\/json(?:\s*;|$)/i.test(contentType)) {
+      throw new ApiError(415, "unsupported_media_type", "The lookup request must use application/json.");
+    }
+    const contentLength = context.req.header("content-length");
+    if (contentLength !== undefined && (!/^\d+$/.test(contentLength) || Number(contentLength) > MAX_LOOKUP_BODY_LENGTH)) {
+      throw new ApiError(413, "request_too_large", "The lookup request is too large.");
+    }
+    const raw = await context.req.text();
+    if (raw.length > MAX_LOOKUP_BODY_LENGTH) throw new ApiError(413, "request_too_large", "The lookup request is too large.");
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); }
+    catch { throw validationError("body", "must contain valid JSON."); }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw validationError("body", "must contain bundleIdentifiers and channel.");
+    }
+    const body = parsed as Record<string, unknown>;
+    if (Object.keys(body).sort().join(",") !== "bundleIdentifiers,channel") {
+      throw validationError("body", "must contain only bundleIdentifiers and channel.");
+    }
+    if (!Array.isArray(body["bundleIdentifiers"]) || body["bundleIdentifiers"].length > MAX_UPDATE_ITEMS) {
+      throw new ApiError(413, "request_too_large", `A maximum of ${MAX_UPDATE_ITEMS} bundle identifiers is allowed.`);
+    }
+    const bundleIdentifiers = body["bundleIdentifiers"].map((value: unknown, index: number) => {
+      if (typeof value !== "string" || value.length > 255 || !BUNDLE_IDENTIFIER_PATTERN.test(value)) {
+        throw validationError(`bundleIdentifiers[${index}]`, "must be a valid bundle identifier.");
+      }
+      return value;
+    });
+    if (new Set(bundleIdentifiers).size !== bundleIdentifiers.length) {
+      throw validationError("bundleIdentifiers", "must not contain duplicates.");
+    }
+    const channel = body["channel"];
+    if (channel !== "stable" && channel !== "beta") throw validationError("channel", "must be stable or beta.");
+    const apps = await lookupPublishedApps(context.env, bundleIdentifiers, channel);
+    return noStoreJsonResponse(context as ApiContext, { data: apps });
   });
 
   routes.get("/repository", async (context) => {

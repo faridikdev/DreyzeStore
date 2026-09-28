@@ -155,6 +155,8 @@ export interface FeaturedSection {
 export interface UpdateAvailable {
   app: StoreAppSummary;
   installedVersion: string;
+  installedBuild?: string;
+  channel: "stable" | "beta";
   latestVersion: AppVersion;
 }
 

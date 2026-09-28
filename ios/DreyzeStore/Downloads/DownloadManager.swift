@@ -45,6 +45,34 @@ final class DownloadManager: ObservableObject {
         start(app: app)
     }
 
+    func downloadAndWait(app: StoreApp) async throws -> VerifiedPackage {
+        let key = PackageDownloadRelease(app: app).deduplicationKey
+        if case .ready(let package) = states[key] { return package }
+        start(app: app)
+        do {
+            while true {
+                try Task.checkCancellation()
+                switch states[key] ?? .idle {
+                case .ready(let package): return package
+                case .failed(let failure): throw failure
+                case .cancelled: throw CancellationError()
+                default: try await Task.sleep(for: .milliseconds(100))
+                }
+            }
+        } catch is CancellationError {
+            cancel(app: app)
+            throw CancellationError()
+        }
+    }
+
+    func prunePreviousPackages(bundleIdentifier: String, keeping package: VerifiedPackage) throws {
+        let previous = storage.verifiedPackages().filter {
+            $0.bundleIdentifier == bundleIdentifier
+                && !($0.version == package.version && $0.build == package.build && $0.sha256 == package.sha256)
+        }
+        for item in previous { try deletePackage(item) }
+    }
+
     func cancel(app: StoreApp) {
         let key = PackageDownloadRelease(app: app).deduplicationKey
         guard let id = activeIDs.removeValue(forKey: key) else { return }
