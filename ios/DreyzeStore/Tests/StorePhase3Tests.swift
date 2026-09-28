@@ -47,7 +47,7 @@ final class StorePhase3Tests: XCTestCase {
         StubURLProtocol.handler = { request in
             XCTAssertEqual(request.url?.path, "/api/v1/apps/lookup")
             XCTAssertEqual(request.httpMethod, "POST")
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try XCTUnwrap(request.capturedBodyForStub())
             let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             XCTAssertEqual(json["bundleIdentifiers"] as? [String], ["com.dreyze.orbittimer"])
             XCTAssertEqual(json["channel"] as? String, "stable")
@@ -67,7 +67,7 @@ final class StorePhase3Tests: XCTestCase {
             }
             XCTAssertEqual(request.url?.path, "/api/v1/updates")
             XCTAssertEqual(request.httpMethod, "POST")
-            let body = try XCTUnwrap(request.httpBody)
+            let body = try XCTUnwrap(request.capturedBodyForStub())
             let parsedBody = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
             let parsedApps = try XCTUnwrap(parsedBody["apps"] as? [[String: Any]])
             XCTAssertEqual(parsedApps.first?["bundleIdentifier"] as? String, "com.dreyze.orbittimer")
@@ -191,6 +191,26 @@ private final class StubURLProtocol: URLProtocol {
         } catch { client?.urlProtocol(self, didFailWithError: error) }
     }
     override func stopLoading() { }
+}
+
+private extension URLRequest {
+    func capturedBodyForStub() -> Data? {
+        if let httpBody { return httpBody }
+        guard let stream = httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = buffer.withUnsafeMutableBufferPointer { pointer -> Int in
+                guard let baseAddress = pointer.baseAddress else { return 0 }
+                return stream.read(baseAddress, maxLength: pointer.count)
+            }
+            if count <= 0 { break }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+        return data.isEmpty ? nil : data
+    }
 }
 
 private actor MemorySnapshotStore: CatalogSnapshotStore {
