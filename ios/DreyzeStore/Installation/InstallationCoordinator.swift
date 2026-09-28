@@ -235,7 +235,7 @@ public final class InstallationCoordinator: ObservableObject {
               option.availability == .available,
               option.capabilities.contains(.confirmedInstall),
               option.capabilities.contains(.inventory) else {
-            return .unsupported(.unavailable("Windows Companion must be connected, paired, and ready to sign before updating.")))
+            return .unsupported(.unavailable("Windows Companion must be connected, paired, and ready to sign before updating."))
         }
         var backendReportedProgress = false
         stateObserver = { state in
@@ -281,11 +281,11 @@ public final class InstallationCoordinator: ObservableObject {
         guard app.source == .companionConfirmed,
               let backend = backends.first(where: { $0.identifier == "windows-companion" }),
               let refreshBackend = backend as? any InstalledAppRefreshing else {
-            return .unsupported(.configurationRequired("Refresh requires a Companion-confirmed app and the Windows Companion refresh service.")))
+            return .unsupported(.configurationRequired("Refresh requires a Companion-confirmed app and the Windows Companion refresh service."))
         }
         await backend.refreshAvailability()
         guard backend.availability == .available else {
-            return .unsupported(.unavailable("Reconnect Windows Companion and configure a current signing profile to refresh this app.")))
+            return .unsupported(.unavailable("Reconnect Windows Companion and configure a current signing profile to refresh this app."))
         }
         return await refreshBackend.refreshInstalledApp(app)
     }

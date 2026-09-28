@@ -664,7 +664,7 @@ public final class WindowsCompanionInstallationBackend: InstallationBackend, Ins
               let pairing = WindowsCompanionPairingStore.load(),
               let udid = pairing.deviceUDID,
               app.deviceIdentifier == Self.deviceIdentifier(for: udid) else {
-            return .unsupported(.configurationRequired("A Companion-confirmed installation record on the paired iPhone is required to refresh this app.")))
+            return .unsupported(.configurationRequired("A Companion-confirmed installation record on the paired iPhone is required to refresh this app."))
         }
         await refreshAvailability()
         guard availability == .available else {
