@@ -1,0 +1,10 @@
+[advisories]
+# RUSTSEC-2023-0071 (Marvin timing attack): rsa 0.9.10 is pulled in by the
+# pinned Apple provisioning/signing dependencies. This app uses RSA private
+# operations locally for CSR/code-signature generation and exposes no RSA
+# decryption endpoint. RustSec reports that local use on a non-compromised
+# computer is an acceptable workaround while no upstream patch exists.
+# Keep this exception visible; re-review before every Companion release and
+# remove it as soon as a patched crate or safer upstream path is available.
+# Owner: DreyzeStore maintainers. Review by: 2026-12-28.
+ignore = ["RUSTSEC-2023-0071"]
