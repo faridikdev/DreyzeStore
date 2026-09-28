@@ -71,6 +71,7 @@ struct DownloadFlowSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
         .task {
+            await manager.restoreVerifiedPackage(for: app)
             await installationCoordinator.refreshBackendOptions()
             if selectedBackendIdentifier.isEmpty {
                 selectedBackendIdentifier = installationCoordinator.automaticBackendIdentifier() ?? ""
@@ -133,6 +134,7 @@ struct DownloadFlowSheet: View {
                 Button("Download") { manager.start(app: app) }
                     .buttonStyle(.borderedProminent).tint(StorePalette.accent).frame(maxWidth: .infinity)
                     .accessibilityHint("Downloads and verifies the package. It does not install it.")
+                    .accessibilityIdentifier("downloadFlow.confirmDownload")
             }
         }
     }
@@ -240,6 +242,7 @@ struct DownloadFlowSheet: View {
             }
             .buttonStyle(.borderedProminent).tint(StorePalette.accent)
             .disabled(installationCoordinator.availableBackendOptions.isEmpty)
+            .accessibilityIdentifier("downloadFlow.installVerifiedPackage")
             if #available(iOS 26.0, *), installationCoordinator.availableBackendOptions.isEmpty {
                 NavigationLink("Connect Windows Companion") { WindowsCompanionPairingView() }
                     .buttonStyle(.bordered)
@@ -397,15 +400,17 @@ struct DownloadedPackagesView: View {
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .refreshable { manager.refreshPackages() }
+                .refreshable { await manager.refreshPackages() }
             }
         }
-        .task { manager.refreshPackages() }
+        .task { await manager.refreshPackages() }
         .confirmationDialog("Delete Downloaded Package?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) {
                 guard let packageToDelete else { return }
-                do { try manager.deletePackage(packageToDelete) }
-                catch { errorMessage = "The package could not be deleted. Please try again." }
+                Task {
+                    do { try await manager.deletePackage(packageToDelete) }
+                    catch { errorMessage = "The package could not be deleted. Please try again." }
+                }
             }
             Button("Cancel", role: .cancel) { packageToDelete = nil }
         } message: { Text("\(packageToDelete?.name ?? "This package") will be removed from DreyzeStore.") }

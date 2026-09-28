@@ -19,12 +19,14 @@ struct SettingsView: View {
                 }
                 Section("Store") {
                     NavigationLink { InstallationSettingsView() } label: { Label("Installation", systemImage: "square.and.arrow.down") }
+                    NavigationLink { WindowsCompanionPairingView() } label: { Label("Windows Companion", systemImage: "desktopcomputer") }
                     NavigationLink { UpdatePreferencesView() } label: { Label("Updates", systemImage: "arrow.down.circle") }
                     NavigationLink { SimpleSettingsView(title: "Sources", symbol: "externaldrive.connected.to.line.below", message: "This build reads the configured DreyzeStore catalog. Adding and managing repositories will be available in a later phase.") } label: { Label("Sources", systemImage: "externaldrive.connected.to.line.below") }
                     NavigationLink { StorageSettingsView() } label: { Label("Storage", systemImage: "internaldrive") }
                 }
                 Section("Privacy & Security") {
                     NavigationLink { SimpleSettingsView(title: "Security", symbol: "checkmark.shield", message: "A matching SHA-256 confirms file integrity against published metadata. It does not prove that an app is safe.") } label: { Label("Security", systemImage: "checkmark.shield") }
+                    NavigationLink { PrivacySettingsView() } label: { Label("Privacy", systemImage: "hand.raised") }
                 }
                 Section("About") {
                     NavigationLink { AboutSettingsView() } label: { Label("About DreyzeStore", systemImage: "info.circle") }
@@ -36,6 +38,33 @@ struct SettingsView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+    }
+}
+
+private struct PrivacySettingsView: View {
+    private let policyURL = URL(string: "https://github.com/faridikdev/DreyzeStore/blob/main/docs/privacy.md")!
+
+    var body: some View {
+        List {
+            Section("Store Requests") {
+                Text("DreyzeStore requests public catalog, app details, search, featured content, and release metadata from the HTTPS API configured for this build. The server may receive standard request information such as IP address and user agent in its infrastructure logs.")
+            }
+            Section("Stored on this iPhone") {
+                Text("Recent searches, catalog snapshots, image cache, downloaded verified packages, preferences, update history, and the paired Companion connection are stored locally. The pairing token is protected by iOS Keychain.")
+            }
+            Section("Windows Companion") {
+                Text("Signing identities and provisioning profiles stay on your Windows PC. DreyzeStore’s catalog backend does not receive Apple credentials, private keys, P12 passwords, provisioning files, or Companion pairing secrets.")
+                Text("When paired, the iPhone and Companion exchange device inventory, package metadata, and installation status over the pinned local connection.")
+            }
+            Section("Package Verification") {
+                Text("Checksum and package validation detect changes and metadata mismatches. They do not establish that an app is safe or free of malware.")
+            }
+            Section {
+                Link(destination: policyURL) { Label("Full Privacy Documentation", systemImage: "arrow.up.right.square") }
+            }
+        }
+        .navigationTitle("Privacy")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -148,6 +177,11 @@ private struct StorageSettingsView: View {
                 }
                 .disabled(usage.downloadedPackages == 0)
             }
+            Section("Previous Versions") {
+                LabeledContent("Older verified packages", value: ByteCountFormatter.string(fromByteCount: usage.previousVersions, countStyle: .file))
+                Text("These are older downloads for the same apps. They remain available according to your package retention setting.")
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
             Section("Cache") {
                 LabeledContent("Cache", value: ByteCountFormatter.string(fromByteCount: usage.cache, countStyle: .file))
                 Text("Catalog metadata expires after 7 days. The image cache is limited to 96 MB on disk.")
@@ -172,14 +206,16 @@ private struct StorageSettingsView: View {
         .alert("Store Cache", isPresented: $showingResult) { Button("OK", role: .cancel) { } } message: { Text(resultMessage) }
         .confirmationDialog("Delete Downloaded Packages?", isPresented: $showingDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete All Packages", role: .destructive) {
-                do {
-                    try downloadManager.deleteAllDownloadedPackages()
-                    resultMessage = "Downloaded packages were deleted."
-                } catch {
-                    resultMessage = "Some packages could not be deleted. Please try again."
+                Task {
+                    do {
+                        try await downloadManager.deleteAllDownloadedPackages()
+                        resultMessage = "Downloaded packages were deleted."
+                    } catch {
+                        resultMessage = "Some packages could not be deleted. Please try again."
+                    }
+                    showingResult = true
+                    await refreshUsage()
                 }
-                showingResult = true
-                Task { await refreshUsage() }
             }
             Button("Cancel", role: .cancel) { }
         } message: { Text("This removes only verified package files managed by DreyzeStore.") }
@@ -189,7 +225,7 @@ private struct StorageSettingsView: View {
     private func refreshUsage() async {
         let metadataBytes = await FileCatalogSnapshotStore().storageBytes()
         let imageBytes = await RemoteImageService.shared.diskCacheUsage()
-        usage = downloadManager.storageUsage(cacheBytes: metadataBytes + imageBytes)
+        usage = await downloadManager.storageUsage(cacheBytes: metadataBytes + imageBytes)
     }
 
     private func clearCache() async {
@@ -205,14 +241,16 @@ private struct StorageSettingsView: View {
     }
 
     private func cleanTemporaryFiles() {
-        do {
-            let removed = try downloadManager.cleanTemporaryFiles()
-            resultMessage = "Cleaned \(ByteCountFormatter.string(fromByteCount: removed, countStyle: .file)) of inactive temporary files."
-        } catch {
-            resultMessage = "Temporary files could not be cleaned. Please try again."
+        Task {
+            do {
+                let removed = try await downloadManager.cleanTemporaryFiles()
+                resultMessage = "Cleaned \(ByteCountFormatter.string(fromByteCount: removed, countStyle: .file)) of inactive temporary files."
+            } catch {
+                resultMessage = "Temporary files could not be cleaned. Please try again."
+            }
+            showingResult = true
+            await refreshUsage()
         }
-        showingResult = true
-        Task { await refreshUsage() }
     }
 }
 
@@ -233,7 +271,7 @@ private struct AboutSettingsView: View {
             Section("Project") {
                 Link(destination: URL(string: "https://github.com/faridikdev/DreyzeStore")!) { Label("GitHub", systemImage: "chevron.left.forwardslash.chevron.right") }
                 NavigationLink("Licenses & Acknowledgements") { LicenseAcknowledgementsView() }
-                NavigationLink("Privacy") { SimpleSettingsView(title: "Privacy", symbol: "hand.raised", message: "The store requests public catalog metadata from the API configured for this build. Search history is stored locally on this device.") }
+                NavigationLink("Privacy") { PrivacySettingsView() }
             }
         }
         .navigationTitle("About").navigationBarTitleDisplayMode(.inline)

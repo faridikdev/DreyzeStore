@@ -3,6 +3,7 @@ import SwiftUI
 struct AppDetailsView: View {
     @StateObject private var model: AppDetailsViewModel
     @StateObject private var downloadManager = DownloadManager.shared
+    @StateObject private var inventory = InstalledInventoryService.shared
     @State private var selectedScreenshot: AppScreenshot?
     @State private var showDownloadSheet = false
 
@@ -26,7 +27,11 @@ struct AppDetailsView: View {
         .background(StorePalette.canvas.ignoresSafeArea())
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .navigationBarTrailing) { ProfileButton() } }
-        .task { await model.load() }
+        .task {
+            async let appLoad: Void = model.load()
+            _ = await inventory.synchronize()
+            await appLoad
+        }
         .sheet(isPresented: $showDownloadSheet) {
             if let app = model.app { DownloadFlowSheet(app: app, manager: downloadManager) }
         }
@@ -53,6 +58,13 @@ struct AppDetailsView: View {
                         Text(app.currentVersion.releaseNotes).font(.body).foregroundStyle(.primary.opacity(0.82)).fixedSize(horizontal: false, vertical: true)
                     }
                 }
+                if case .cached(let snapshot) = inventory.state,
+                   snapshot.records.contains(where: { $0.canonicalBundleIdentifier.caseInsensitiveCompare(app.bundleIdentifier) == .orderedSame }) {
+                    Label("Companion last checked \(snapshot.lastChecked.formatted(date: .abbreviated, time: .shortened)). Refresh status before installing or updating.", systemImage: "wifi.slash")
+                        .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                }
                 packageInformation(app)
                 if !model.versions.isEmpty { versionHistory }
             }
@@ -74,13 +86,22 @@ struct AppDetailsView: View {
                 }
                 Spacer(minLength: 0)
             }
-            Button { showDownloadSheet = true } label: {
-                HStack(spacing: 8) { Image(systemName: "arrow.down.to.line"); Text(downloadTitle(for: app)) }
+            Button {
+                if isInventoryCached(for: app) {
+                    Task { _ = await inventory.synchronize() }
+                } else if !isInstalledAndCurrent(app) {
+                    showDownloadSheet = true
+                }
+            } label: {
+                HStack(spacing: 8) { Image(systemName: actionSymbol(for: app)); Text(downloadTitle(for: app)) }
                     .font(.subheadline.weight(.bold)).frame(maxWidth: .infinity).padding(.vertical, 13)
-                    .foregroundStyle(.white).background(StorePalette.accent, in: Capsule())
+                    .foregroundStyle(isInstalledAndCurrent(app) ? StorePalette.accent : .white)
+                    .background(isInstalledAndCurrent(app) ? StorePalette.accent.opacity(0.12) : StorePalette.accent, in: Capsule())
             }
             .buttonStyle(.plain)
-            .accessibilityHint("Downloads and verifies the package. It does not install the app.")
+            .disabled(isInstalledAndCurrent(app))
+            .accessibilityHint(actionHint(for: app))
+            .accessibilityIdentifier("appDetails.primaryAction")
             HStack(spacing: 0) {
                 AppFact(title: "VERSION", value: app.currentVersion.version)
                 AppFact(title: "REQUIRES", value: "iOS \(app.currentVersion.minimumOSVersion)")
@@ -92,6 +113,15 @@ struct AppDetailsView: View {
     }
 
     private func downloadTitle(for app: StoreApp) -> String {
+        if isInventoryCached(for: app) { return "CHECK STATUS" }
+        if let record = confirmedRecord(for: app) {
+            return VersionComparator.isNewerRelease(
+                candidateVersion: app.currentVersion.version,
+                candidateBuild: app.currentVersion.build,
+                installedVersion: record.version ?? "",
+                installedBuild: record.build
+            ) ? "UPDATE" : "INSTALLED"
+        }
         switch downloadManager.state(for: app) {
         case .preparing, .downloading: "DOWNLOADING"
         case .verifying: "VERIFYING"
@@ -99,6 +129,51 @@ struct AppDetailsView: View {
         case .ready: "READY"
         case .failed: "RETRY"
         case .idle, .cancelled: "GET"
+        }
+    }
+
+    private func actionSymbol(for app: StoreApp) -> String {
+        switch downloadTitle(for: app) {
+        case "UPDATE": "arrow.clockwise"
+        case "INSTALLED": "checkmark"
+        case "CHECK STATUS": "arrow.clockwise"
+        case "READY": "checkmark.shield"
+        default: "arrow.down.to.line"
+        }
+    }
+
+    private func actionHint(for app: StoreApp) -> String {
+        switch downloadTitle(for: app) {
+        case "UPDATE": "Downloads and verifies the newer release, then offers installation through a ready Windows Companion."
+        case "INSTALLED": "Windows Companion confirmed this installed version from the connected iPhone."
+        case "CHECK STATUS": "Refreshes the saved Companion inventory before offering installation actions."
+        default: "Downloads and verifies the package. Installation requires a paired and configured Windows Companion."
+        }
+    }
+
+    private func confirmedRecord(for app: StoreApp) -> InstalledAppRecord? {
+        guard case .live(let snapshot) = inventory.state else { return nil }
+        return snapshot.records.first {
+            $0.source == .companionConfirmed
+                && $0.canonicalBundleIdentifier.caseInsensitiveCompare(app.bundleIdentifier) == .orderedSame
+        }
+    }
+
+    private func isInstalledAndCurrent(_ app: StoreApp) -> Bool {
+        guard let record = confirmedRecord(for: app), let installedVersion = record.version else { return false }
+        return !VersionComparator.isNewerRelease(
+            candidateVersion: app.currentVersion.version,
+            candidateBuild: app.currentVersion.build,
+            installedVersion: installedVersion,
+            installedBuild: record.build
+        )
+    }
+
+    private func isInventoryCached(for app: StoreApp) -> Bool {
+        guard case .cached(let snapshot) = inventory.state else { return false }
+        return snapshot.records.contains {
+            $0.source == .companionConfirmed
+                && $0.canonicalBundleIdentifier.caseInsensitiveCompare(app.bundleIdentifier) == .orderedSame
         }
     }
 
@@ -123,8 +198,8 @@ struct AppDetailsView: View {
     }
 
     private func packageInformation(_ app: StoreApp) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            StoreSectionHeading(title: "Information")
+        VStack(alignment: .leading, spacing: 12) {
+            DisclosureGroup("Package Information") {
             VStack(spacing: 0) {
                 MetadataLine(title: "Developer", value: app.developer.name)
                 if let websiteURL = app.developer.websiteURL {
@@ -145,6 +220,12 @@ struct AppDetailsView: View {
                 }.frame(maxWidth: .infinity, alignment: .leading).padding(14)
             }
             .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            Text("Verification checks package integrity and metadata. It does not guarantee that the app is safe.")
+                .font(.footnote).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 2).padding(.top, 6)
+            }
+            .font(.headline)
+            .tint(StorePalette.accent)
         }
     }
 

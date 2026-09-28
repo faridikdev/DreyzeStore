@@ -2,7 +2,6 @@ import SwiftUI
 
 struct TodayView: View {
     @StateObject private var model: TodayViewModel
-    @State private var showInstallNotice = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(repository: (any StoreRepository)?) { _model = StateObject(wrappedValue: TodayViewModel(repository: repository)) }
@@ -33,8 +32,6 @@ struct TodayView: View {
         .refreshable { await model.load(refresh: true) }
         .task { await model.load() }
         .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.88), value: model.state)
-        .alert("Installation isn’t available yet", isPresented: $showInstallNotice) { Button("OK", role: .cancel) { } }
-        message: { Text("Installation will be available through the configured installation backend.") }
     }
 
     @ViewBuilder private var content: some View {
@@ -72,11 +69,15 @@ struct TodayView: View {
                 Text(app.currentVersion.releaseNotes.isEmpty ? "Explore this week’s pick" : app.currentVersion.releaseNotes)
                     .font(.subheadline).foregroundStyle(.secondary).lineLimit(2)
                 Spacer(minLength: 8)
-                Button("GET") { showInstallNotice = true; StoreHaptics.selection() }
+                NavigationLink(destination: AppDetailsView(repository: modelRepository, appID: app.id)) {
+                    Text("GET")
                     .font(.caption.weight(.bold)).foregroundStyle(.white)
                     .padding(.horizontal, 18).padding(.vertical, 10)
                     .background(StorePalette.accent, in: Capsule())
-                    .accessibilityLabel("Get \(app.name). Installation is not available yet.")
+                }
+                .buttonStyle(.plain)
+                .simultaneousGesture(TapGesture().onEnded { StoreHaptics.selection() })
+                .accessibilityLabel("View \(app.name) and download options")
                 NavigationLink(destination: AppDetailsView(repository: modelRepository, appID: app.id)) {
                     Image(systemName: "arrow.up.right").font(.headline.weight(.semibold)).foregroundStyle(.white)
                         .frame(width: 42, height: 42).background(StorePalette.accent, in: Circle())

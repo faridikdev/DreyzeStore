@@ -134,7 +134,6 @@ struct RemoteStoreImage: View {
 struct AppSummaryCard: View {
     let app: StoreApp
     let repository: (any StoreRepository)?
-    @State private var showInstallNotice = false
 
     var body: some View {
         HStack(spacing: 14) {
@@ -151,19 +150,18 @@ struct AppSummaryCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            Button("GET") { showInstallNotice = true; UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+            NavigationLink(destination: AppDetailsView(repository: repository, appID: app.id)) {
+                Text("GET")
                 .font(.caption.weight(.bold)).foregroundStyle(StorePalette.accent)
                 .padding(.horizontal, 15).padding(.vertical, 8)
                 .background(StorePalette.accent.opacity(0.11), in: Capsule())
-                .accessibilityLabel("Get \(app.name). Installation is not available yet.")
+            }
+            .buttonStyle(.plain)
+            .simultaneousGesture(TapGesture().onEnded { UIImpactFeedbackGenerator(style: .light).impactOccurred() })
+            .accessibilityLabel("View \(app.name) and download options")
         }
         .padding(14)
         .background(StorePalette.surface, in: RoundedRectangle(cornerRadius: 23, style: .continuous))
-        .alert("Installation isn’t available yet", isPresented: $showInstallNotice) {
-            Button("OK", role: .cancel) { }
-        } message: {
-            Text("Installation will be available through the configured installation backend.")
-        }
     }
 }
 

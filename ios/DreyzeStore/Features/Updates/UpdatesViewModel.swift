@@ -17,8 +17,8 @@ protocol UpdatePackageManaging: AnyObject {
     func start(app: StoreApp)
     func retry(app: StoreApp)
     func cancel(app: StoreApp)
-    func refreshPackages()
-    func prunePreviousPackages(bundleIdentifier: String, keeping package: VerifiedPackage) throws
+    func refreshPackages() async
+    func prunePreviousPackages(bundleIdentifier: String, keeping package: VerifiedPackage) async throws
 }
 
 extension DownloadManager: UpdatePackageManaging { }
@@ -327,7 +327,7 @@ final class UpdatesViewModel: ObservableObject {
                 updateStates[update.app.bundleIdentifier] = .updated
                 updates.removeAll { $0.app.bundleIdentifier == update.app.bundleIdentifier }
                 if !keepPreviousVersion {
-                    try? packages.prunePreviousPackages(bundleIdentifier: package.bundleIdentifier, keeping: package)
+                    try? await packages.prunePreviousPackages(bundleIdentifier: package.bundleIdentifier, keeping: package)
                 }
                 lastOperationSummary = "\(update.app.name) updated to \(package.version)."
                 await load(refresh: true)

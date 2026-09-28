@@ -25,8 +25,7 @@ final class DownloadManager: ObservableObject {
         self.transport = transport
         self.urlPolicy = urlPolicy
         self.validator = PackageValidator(storage: storage)
-        try? storage.cleanOrphanedVerifiedPackages()
-        self.packages = storage.verifiedPackages()
+        self.packages = []
     }
 
     func state(for app: StoreApp) -> PackageDownloadState {
@@ -65,12 +64,12 @@ final class DownloadManager: ObservableObject {
         }
     }
 
-    func prunePreviousPackages(bundleIdentifier: String, keeping package: VerifiedPackage) throws {
-        let previous = storage.verifiedPackages().filter {
+    func prunePreviousPackages(bundleIdentifier: String, keeping package: VerifiedPackage) async throws {
+        let previous = packages.filter {
             $0.bundleIdentifier == bundleIdentifier
                 && !($0.version == package.version && $0.build == package.build && $0.sha256 == package.sha256)
         }
-        for item in previous { try deletePackage(item) }
+        for item in previous { try await deletePackage(item) }
     }
 
     func cancel(app: StoreApp) {
@@ -83,9 +82,14 @@ final class DownloadManager: ObservableObject {
     }
 
     func restorePendingDownloads() {
-        packages = storage.verifiedPackages()
-        for intent in storage.pendingIntents() where activeIDs[ intent.release.deduplicationKey ] == nil {
-            start(release: intent.release, transferID: intent.id, restoredIntent: intent)
+        Task { [weak self] in
+            guard let self else { return }
+            await self.refreshPackages()
+            let storage = self.storage
+            let intents = await Task.detached(priority: .utility) { storage.pendingIntents() }.value
+            for intent in intents where self.activeIDs[intent.release.deduplicationKey] == nil {
+                self.start(release: intent.release, transferID: intent.id, restoredIntent: intent)
+            }
         }
     }
 
@@ -98,13 +102,57 @@ final class DownloadManager: ObservableObject {
         transport.setBackgroundEventsCompletionHandler(handler)
     }
 
-    func refreshPackages() {
-        packages = storage.verifiedPackages()
+    func refreshPackages() async {
+        let storage = self.storage
+        let task = Task.detached(priority: .utility) {
+            try? storage.cleanOrphanedVerifiedPackages()
+            return storage.verifiedPackages()
+        }
+        packages = await task.value
     }
 
-    func deletePackage(_ package: StoredVerifiedPackage) throws {
-        try storage.deleteVerifiedPackage(id: package.id)
-        packages = storage.verifiedPackages()
+    /// Restores a saved package only after hashing and inspecting it again.
+    /// A persisted record alone is never sufficient to re-create VerifiedPackage.
+    func restoreVerifiedPackage(for app: StoreApp) async {
+        let release = PackageDownloadRelease(app: app)
+        let key = release.deduplicationKey
+        guard !(states[key]?.isActive ?? false), !isReady(states[key] ?? .idle) else { return }
+        await refreshPackages()
+        guard let stored = packages.first(where: {
+            $0.appID == release.appID
+                && $0.bundleIdentifier == release.bundleIdentifier
+                && $0.version == release.version
+                && $0.build == release.build
+                && $0.sha256.caseInsensitiveCompare(release.sha256) == .orderedSame
+                && $0.sourceIdentifier == release.sourceIdentifier
+        }) else { return }
+
+        let validator = self.validator
+        let storage = self.storage
+        do {
+            let (package, refreshedPackages) = try await Task.detached(priority: .utility) {
+                let package = try validator.revalidateStoredPackage(stored)
+                guard storage.storedPackage(matching: package) != nil else {
+                    throw PackageVerificationError.unsafeArchive
+                }
+                return (package, storage.verifiedPackages())
+            }.value
+            packages = refreshedPackages
+            setState(.ready(package), for: key)
+        } catch {
+            let refreshedPackages = await Task.detached(priority: .utility) {
+                try? storage.deleteVerifiedPackage(id: stored.id)
+                return storage.verifiedPackages()
+            }.value
+            packages = refreshedPackages
+            setState(.failed(Self.failure(for: error)), for: key)
+        }
+    }
+
+    func deletePackage(_ package: StoredVerifiedPackage) async throws {
+        let storage = self.storage
+        try await Task.detached(priority: .utility) { try storage.deleteVerifiedPackage(id: package.id) }.value
+        packages.removeAll { $0.id == package.id }
         for (key, state) in states where isReady(state) {
             if case .ready(let verified) = state, verified.localURL.deletingPathExtension().lastPathComponent == package.id {
                 states[key] = .idle
@@ -112,18 +160,26 @@ final class DownloadManager: ObservableObject {
         }
     }
 
-    func deleteAllDownloadedPackages() throws {
-        try storage.deleteAllVerifiedPackages()
-        packages = storage.verifiedPackages()
+    func deleteAllDownloadedPackages() async throws {
+        let storage = self.storage
+        try await Task.detached(priority: .utility) { try storage.deleteAllVerifiedPackages() }.value
+        packages = []
         for (key, state) in states where isReady(state) { states[key] = .idle }
     }
 
-    func cleanTemporaryFiles() throws -> Int64 {
-        try storage.cleanTemporaryFiles(preserving: Set(activeIDs.values), olderThan: .distantFuture)
+    func cleanTemporaryFiles() async throws -> Int64 {
+        let storage = self.storage
+        let activeIDs = Set(self.activeIDs.values)
+        return try await Task.detached(priority: .utility) {
+            try storage.cleanTemporaryFiles(preserving: activeIDs, olderThan: .distantFuture)
+        }.value
     }
 
-    func storageUsage(cacheBytes: Int64 = 0) -> PackageStorageUsage {
-        storage.storageUsage(cacheBytes: cacheBytes)
+    func storageUsage(cacheBytes: Int64 = 0) async -> PackageStorageUsage {
+        let storage = self.storage
+        return await Task.detached(priority: .utility) {
+            storage.storageUsage(cacheBytes: cacheBytes)
+        }.value
     }
 
     private func start(release: PackageDownloadRelease, transferID: UUID, restoredIntent: PackageDownloadIntent? = nil) {
@@ -194,7 +250,7 @@ final class DownloadManager: ObservableObject {
                 inspectionTask.cancel()
             }
             guard activeIDs[key] == transferID else { return }
-            packages = storage.verifiedPackages()
+            await refreshPackages()
             setState(.ready(package), for: key)
         } catch is CancellationError {
             storage.removeTransferFiles(transferID)

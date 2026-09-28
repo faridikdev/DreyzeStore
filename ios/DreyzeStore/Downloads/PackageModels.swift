@@ -176,8 +176,16 @@ struct StoredVerifiedPackage: Codable, Hashable, Sendable, Identifiable {
 
 struct PackageStorageUsage: Equatable, Sendable {
     let downloadedPackages: Int64
+    let previousVersions: Int64
     let temporaryFiles: Int64
     let cache: Int64
+
+    init(downloadedPackages: Int64, previousVersions: Int64 = 0, temporaryFiles: Int64, cache: Int64) {
+        self.downloadedPackages = downloadedPackages
+        self.previousVersions = previousVersions
+        self.temporaryFiles = temporaryFiles
+        self.cache = cache
+    }
 
     var total: Int64 { downloadedPackages + temporaryFiles + cache }
 }

@@ -58,6 +58,8 @@
 		000000000000000000000233 /* UpdatesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000140 /* UpdatesViewModel.swift */; };
 		000000000000000000000234 /* UpdateNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000141 /* UpdateNotificationService.swift */; };
 		000000000000000000000235 /* UpdatesPhase7Tests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000142 /* UpdatesPhase7Tests.swift */; };
+		000000000000000000000236 /* DreyzeOnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000143 /* DreyzeOnboardingView.swift */; };
+		000000000000000000000237 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 000000000000000000000144 /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -122,6 +124,8 @@
 		000000000000000000000140 /* UpdatesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesViewModel.swift; sourceTree = "<group>"; };
 		000000000000000000000141 /* UpdateNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateNotificationService.swift; sourceTree = "<group>"; };
 		000000000000000000000142 /* UpdatesPhase7Tests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatesPhase7Tests.swift; sourceTree = "<group>"; };
+		000000000000000000000143 /* DreyzeOnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DreyzeOnboardingView.swift; sourceTree = "<group>"; };
+		000000000000000000000144 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		000000000000000000000115 /* DreyzeStore.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DreyzeStore.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		000000000000000000000116 /* DreyzeStoreTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DreyzeStoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -149,13 +153,14 @@
 				00000000000000000000001B /* Components */,
 				00000000000000000000001C /* Features */,
 				000000000000000000000124 /* Assets.xcassets */,
+				000000000000000000000144 /* Localizable.xcstrings */,
 				000000000000000000000125 /* Info.plist */,
 				000000000000000000000022 /* Tests */,
 				000000000000000000000023 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		000000000000000000000011 /* App */ = {isa = PBXGroup; children = (000000000000000000000101, 000000000000000000000102,); path = App; sourceTree = "<group>"; };
+		000000000000000000000011 /* App */ = {isa = PBXGroup; children = (000000000000000000000101, 000000000000000000000102, 000000000000000000000143,); path = App; sourceTree = "<group>"; };
 		000000000000000000000012 /* Core */ = {isa = PBXGroup; children = (000000000000000000000103, 000000000000000000000104,); path = Core; sourceTree = "<group>"; };
 		000000000000000000000013 /* Models */ = {isa = PBXGroup; children = (000000000000000000000105, 000000000000000000000106,); path = Models; sourceTree = "<group>"; };
 		000000000000000000000014 /* Networking */ = {isa = PBXGroup; children = (000000000000000000000107,); path = Networking; sourceTree = "<group>"; };
@@ -243,7 +248,7 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		000000000000000000000602 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000021C,); runOnlyForDeploymentPostprocessing = 0; };
+		000000000000000000000602 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (00000000000000000000021C, 000000000000000000000237,); runOnlyForDeploymentPostprocessing = 0; };
 		000000000000000000000604 /* Resources */ = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
@@ -280,6 +285,7 @@
 				000000000000000000000232,
 				000000000000000000000233,
 				000000000000000000000234,
+				000000000000000000000236,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -309,11 +315,11 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 801;
 				DREYZE_API_BASE_URL = "http://127.0.0.1:8787/api/v1";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.9.0;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -328,11 +334,11 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 801;
 				DREYZE_API_BASE_URL = "https://api.dreyzestore.invalid/api/v1";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 0.9.0;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.dreyzestore.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";

@@ -46,6 +46,44 @@ final class PackagePipelineTests: XCTestCase {
         XCTAssertTrue(storage.pendingIntents().isEmpty)
     }
 
+    func testSavedPackageIsRevalidatedBeforeItCanBeRestoredReady() async throws {
+        let bytes = try makeIPAFixture()
+        let app = makeApp(url: URL(string: "https://packages.example.invalid/sample.ipa")!, bytes: bytes)
+        let firstManager = await MainActor.run {
+            DownloadManager(storage: storage, transport: TestPackageTransport(action: .success(bytes)))
+        }
+        await MainActor.run { firstManager.start(app: app) }
+        guard case .ready(let firstPackage) = await waitForTerminalState(firstManager, app: app) else {
+            return XCTFail("Expected a verified package before restart.")
+        }
+
+        let restoredManager = await MainActor.run {
+            DownloadManager(storage: storage, transport: TestPackageTransport(action: .success(bytes)))
+        }
+        await MainActor.run { XCTAssertEqual(restoredManager.state(for: app), .idle) }
+        await restoredManager.restoreVerifiedPackage(for: app)
+        guard case .ready(let restoredPackage) = await MainActor.run(body: { restoredManager.state(for: app) }) else {
+            return XCTFail("A valid saved package should be revalidated and restored.")
+        }
+        XCTAssertEqual(restoredPackage.localURL, firstPackage.localURL)
+        XCTAssertEqual(restoredPackage.sha256, firstPackage.sha256)
+
+        var modified = try Data(contentsOf: restoredPackage.localURL)
+        modified[0] ^= 0x01
+        try modified.write(to: restoredPackage.localURL, options: .atomic)
+
+        let afterTamperManager = await MainActor.run {
+            DownloadManager(storage: storage, transport: TestPackageTransport(action: .success(bytes)))
+        }
+        await afterTamperManager.restoreVerifiedPackage(for: app)
+        let failedState = await MainActor.run { afterTamperManager.state(for: app) }
+        guard case .failed(let failure) = failedState else {
+            return XCTFail("Modified stored bytes must never be restored as a verified package.")
+        }
+        XCTAssertEqual(failure.code, .checksumMismatch)
+        XCTAssertTrue(storage.verifiedPackages().isEmpty)
+    }
+
     func testCancellationRemovesTemporaryPackageAndReportsCancelled() async throws {
         let bytes = try makeIPAFixture()
         let transport = TestPackageTransport(action: .wait)

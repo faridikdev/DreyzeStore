@@ -344,6 +344,7 @@ final class PackageStorage: @unchecked Sendable {
         guard (try? ensureDirectories()) != nil else { return PackageStorageUsage(downloadedPackages: 0, temporaryFiles: 0, cache: max(0, cacheBytes)) }
         return PackageStorageUsage(
             downloadedPackages: directorySize(verifiedDirectory),
+            previousVersions: previousVersionsSize(),
             temporaryFiles: directorySize(temporaryDirectory),
             cache: max(0, cacheBytes)
         )
@@ -400,6 +401,31 @@ final class PackageStorage: @unchecked Sendable {
             total += Int64(size)
         }
         return total
+    }
+
+    private func previousVersionsSize() -> Int64 {
+        let records = verifiedPackages()
+        let grouped = Dictionary(grouping: records, by: { $0.bundleIdentifier.lowercased() })
+        var previousIDs = Set<String>()
+        for packages in grouped.values where packages.count > 1 {
+            let newest = packages.max { lhs, rhs in
+                if VersionComparator.isNewerRelease(
+                    candidateVersion: lhs.version,
+                    candidateBuild: lhs.build,
+                    installedVersion: rhs.version,
+                    installedBuild: rhs.build
+                ) { return false }
+                if VersionComparator.isNewerRelease(
+                    candidateVersion: rhs.version,
+                    candidateBuild: rhs.build,
+                    installedVersion: lhs.version,
+                    installedBuild: lhs.build
+                ) { return true }
+                return lhs.verifiedAt < rhs.verifiedAt
+            }
+            previousIDs.formUnion(packages.filter { $0.id != newest?.id }.map(\.id))
+        }
+        return records.filter { previousIDs.contains($0.id) }.reduce(Int64.zero) { $0 + $1.size }
     }
 
     private func ensureDirectories() throws {
