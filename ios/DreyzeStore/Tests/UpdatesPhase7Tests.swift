@@ -439,7 +439,7 @@ private final class InventoryStub: UpdateInventorySynchronizing {
     func synchronize() async -> InstalledInventorySnapshot? {
         guard let currentSnapshot else { return nil }
         let refreshed = InstalledInventorySnapshot(records: currentSnapshot.records, lastChecked: currentSnapshot.lastChecked, deviceIdentifier: currentSnapshot.deviceIdentifier, isLive: isLive)
-        currentSnapshot = refreshed
+        self.currentSnapshot = refreshed
         state = isLive ? .live(refreshed) : .cached(refreshed)
         return refreshed
     }
